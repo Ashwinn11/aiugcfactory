@@ -2,9 +2,9 @@
 """
 UGC Factory - Keyframe Image Generation
 
-Reads avatar_config.json and generates 2 keyframe images per action
-(start + peak) using Gemini 3 Pro Image. These keyframes are then
-passed to Veo 3.1 as first-frame + last-frame for interpolation.
+Reads avatar_config.json (minimal user config) and uses an LLM with the
+image_gen system prompt to generate rich, realistic prompts. Those prompts
+are then passed to Nano Banana 2 for image generation.
 
 Usage:
     python test_images.py              # Run all actions
@@ -29,11 +29,24 @@ load_dotenv()
 
 OUTPUT_DIR = Path("test_outputs")
 CONFIG_PATH = Path("avatar_config.json")
+SYSTEM_PROMPT_PATH = Path("prompts/image_gen.txt")
 IMAGE_MODEL = "gemini-3.1-flash-image-preview"
+PROMPT_MODEL = "gemini-3.1-pro-preview"
 
 
 # ---------------------------------------------------------------------------
-# Prompt Builder
+# System Prompt
+# ---------------------------------------------------------------------------
+
+
+def load_system_prompt() -> str:
+    """Load the image generation system prompt."""
+    with open(SYSTEM_PROMPT_PATH) as f:
+        return f.read()
+
+
+# ---------------------------------------------------------------------------
+# Prompt Builder (LLM-powered)
 # ---------------------------------------------------------------------------
 
 
@@ -43,48 +56,51 @@ def load_config() -> dict:
         return json.load(f)
 
 
-def resolve_section(defaults: dict, action_cfg: dict, section: str) -> dict:
-    """Return the action-level section if present, otherwise fall back to defaults."""
-    return action_cfg.get(section, defaults.get(section, {}))
+def build_prompt_via_llm(client: genai.Client, config: dict, action: str, frame: str) -> str:
+    """Use the LLM + system prompt to generate a rich image prompt from minimal config.
 
+    Sends the character description, apparel, scene concept, and frame-specific
+    expression/pose to the LLM. The system prompt handles all photography
+    realism details (iPhone optics, imperfections, lighting, etc.).
 
-def build_prompt(config: dict, action: str, frame: str) -> str:
-    """Build a natural-language prompt from the JSON config sections.
-
-    Each action can override any section (environment, lighting, camera, apparel).
-    Falls back to defaults for anything not specified at the action level.
+    Returns the full_prompt_string from the LLM's JSON response.
     """
-    defaults = config["defaults"]
+    system_prompt = load_system_prompt()
     action_cfg = config["actions"][action]
-    frame_cfg = action_cfg["frames"][frame]
 
-    char = defaults["character"]
-    apparel = resolve_section(defaults, action_cfg, "apparel")
-    env = resolve_section(defaults, action_cfg, "environment")
-    lighting = resolve_section(defaults, action_cfg, "lighting")
-    camera = resolve_section(defaults, action_cfg, "camera")
+    user_message = (
+        f"Character: {config['character']}\n"
+        f"Scene: {action_cfg['scene']}\n"
+        f"Frame: {action_cfg[frame]}"
+    )
 
-    # Use narrative scene description if available, otherwise build from sections
-    scene = action_cfg.get("scene", "")
+    print(f"    LLM input: {user_message[:120]}...")
 
-    parts = [
-        f"Amateur phone video still. {char['demographics']}, {char['hair']}, {char['skin_texture']}.",
-        f"Wearing {apparel['top']}, {apparel['bottoms']}.",
-    ]
+    response = client.models.generate_content(
+        model=PROMPT_MODEL,
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=0.7,
+        ),
+    )
 
-    if scene:
-        parts.append(scene)
-    else:
-        parts.append(f"{env['setting']}.")
+    raw_text = response.text.strip()
+    # Strip markdown code fences if present
+    if raw_text.startswith("```"):
+        raw_text = raw_text.split("\n", 1)[1]  # remove first line
+        raw_text = raw_text.rsplit("```", 1)[0]  # remove last fence
+        raw_text = raw_text.strip()
 
-    parts.extend([
-        lighting["description"] + ".",
-        camera["description"] + ".",
-        f"Expression: {frame_cfg['expression']}.",
-        f"Pose: {frame_cfg['pose']}.",
-    ])
+    result = json.loads(raw_text)
+    full_prompt = result["full_prompt_string"]
+    negative = result.get("negative_prompt", "")
 
-    return " ".join(parts)
+    print(f"    LLM prompt: {full_prompt[:120]}...")
+    if negative:
+        print(f"    Negative: {negative[:80]}...")
+
+    return full_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +111,7 @@ def build_prompt(config: dict, action: str, frame: str) -> str:
 def generate_image(
     client: genai.Client, prompt: str, save_path: Path, reference_image: Path | None = None
 ) -> None:
-    """Generate a single image with Gemini 3 Pro Image and save it.
+    """Generate a single image with the image model and save it.
 
     If reference_image is provided, it's passed alongside the prompt so
     the model keeps the same person/scene consistent.
@@ -151,26 +167,25 @@ def run_action(client: genai.Client, config: dict, action: str) -> None:
     print(f"Action: {action}")
     print(f"{'='*60}")
 
-    # Step 1: Generate start frame (no reference)
-    start_prompt = build_prompt(config, action, "start")
+    # Step 1: Generate start frame prompt via LLM, then generate image
+    print("\n  [start] Building prompt via LLM...")
+    start_prompt = build_prompt_via_llm(client, config, action, "start")
     start_path = action_dir / f"{action}_frame_start.png"
-    print(f"\n  [start] Prompt preview: {start_prompt[:100]}...")
     generate_image(client, start_prompt, start_path)
 
     # Step 2: Generate peak frame using start frame as reference
+    print("\n  [peak] Building prompt via LLM...")
+    peak_prompt = build_prompt_via_llm(client, config, action, "peak")
     peak_prompt = (
         "This is the same person from the reference image. "
         "Keep her face, hair, clothing, and environment identical. "
         "Only change her expression and pose: "
-        + build_prompt(config, action, "peak")
+        + peak_prompt
     )
     peak_path = action_dir / f"{action}_frame_peak.png"
-    print(f"\n  [peak] Prompt preview: {peak_prompt[:100]}...")
     generate_image(client, peak_prompt, peak_path, reference_image=start_path)
 
     print(f"\n  Done! Check {action_dir}/")
-    print(f"  Review: do start & peak look like the same person?")
-    print(f"  Review: natural environment, candid feel, correct pose?")
 
 
 def main():
