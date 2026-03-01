@@ -1,0 +1,99 @@
+{
+  "defaults": {
+    "character": {
+      "demographics": "Young woman, mid-20s, athletic build, light skin",
+      "hair": "Shoulder-length dark brown hair, loose and natural",
+      "skin_texture": "Visible skin texture, natural pores, subtle imperfections, no retouching"
+    },
+    "apparel": {
+      "top": "Pastel pink oversized hoodie",
+      "bottoms": "Light grey joggers",
+      "accessories": "None"
+    },
+    "environment": {
+      "setting": "Lived-in apartment with real clutter, not styled or decorated for camera"
+    },
+    "lighting": {
+      "description": "Daytime, soft natural daylight from windows mixed with indoor ambient light"
+    },
+    "camera": {
+      "description": "Shot on iPhone 15 Pro front camera, amateur selfie framing, raw unedited look, vertical 9:16"
+    }
+  },
+  "actions": {
+    "crying": {
+      "video_prompt": "She is crying. Eyes well up with subtle tears, lower lip trembles, tears slowly roll down her cheeks. One hand rises near her face. Subtle emotional movement, background stays still.",
+      "scene": "Selfie POV from her phone's front camera. She is sitting in the driver's seat of her parked car, crying. The camera is at arm's length, looking directly at her face from slightly above. Behind her the car headrest, seatbelt strap over her shoulder, and through the car windows a daytime parking lot is visible. Her eyes are puffy and red, mascara slightly smudged. One arm extends toward the camera. The phone is not visible because it is the camera.",
+      "environment": {
+        "setting": "Parked car in daytime, driver's seat, parking lot through windows, car headrest and seatbelt visible behind her"
+      },
+      "lighting": {
+        "description": "Soft daylight coming through car windows from all sides, natural ambient light, slightly warm"
+      },
+      "camera": {
+        "description": "Selfie POV from iPhone 15 Pro front camera at arm's length, slightly above face level, close up on face and upper body, off-center framing, raw unedited, vertical 9:16"
+      },
+      "apparel": {
+        "top": "Pastel pink oversized hoodie, sleeves pulled over hands",
+        "bottoms": "Light grey joggers",
+        "accessories": "None"
+      },
+      "frames": {
+        "start": {
+          "expression": "Eyes slightly watery, lower lip beginning to tremble, brow furrowed, mascara slightly smudged",
+          "pose": "Sitting in car driver's seat, one arm extended toward camera, looking directly into camera, seatbelt on"
+        },
+        "peak": {
+          "expression": "Tears streaming down cheeks, eyes red and puffy, mouth slightly open in a sob",
+          "pose": "One arm toward camera, other hand wiping eyes, slightly hunched forward, seatbelt on"
+        }
+      }
+    },
+    "eating": {
+      "video_prompt": "She picks up the spoon, scoops food from the bowl, and takes a bite. She chews slowly and naturally. Smooth hand movements, background stays still.",
+      "scene": "Low angle close-up shot from table height, looking up at her face. She is sitting at a small kitchen table eating a bowl of fruits during the afternoon. The camera is very close, about two feet away at table level, slightly off-center and tilted. The bowl of fruits, a glass of water, and crumbs are visible on the table between the camera and her. Daylight from a nearby window. Messy real weekday lunch, not styled.",
+      "environment": {
+        "setting": "Small kitchen table in daytime, bowl of fruits, glass of water, phone charger cable on table, crumbs, daylight from window"
+      },
+      "lighting": {
+        "description": "Daylight from nearby window mixed with overhead kitchen light, soft natural ambient, slightly warm afternoon light"
+      },
+      "camera": {
+        "description": "Low angle from table height, two feet away, slightly off-center and tilted, looking up at her, raw amateur quality, vertical 9:16"
+      },
+      "frames": {
+        "start": {
+          "expression": "Relaxed, looking down at the food, casual and not performing",
+          "pose": "Sitting at the table, hand reaching for the spoon"
+        },
+        "peak": {
+          "expression": "Mouth open mid-bite, eyes half-closed in enjoyment",
+          "pose": "Spoon near mouth, other hand resting on table"
+        }
+      }
+    },
+    "cutting_fruits": {
+      "video_prompt": "She picks up the knife and carefully slices a piece of fruit on the cutting board. Smooth precise hand movements. She places the sliced piece aside. Background stays still.",
+      "scene": "Close-up shot from counter height, looking straight at her. She is standing at the kitchen counter cutting fruits on a cutting board with both hands, knife in one hand. The camera is very close at counter level. Cutting board, fruits, and kitchen clutter — dish soap, paper towels, a mug — are visible on the counter. Bright afternoon daylight from the kitchen window. Real kitchen, not a studio.",
+      "environment": {
+        "setting": "Kitchen counter with cutting board, fruits, knife, dish soap, paper towels, a mug, spice jar, real kitchen clutter"
+      },
+      "lighting": {
+        "description": "Bright afternoon daylight from kitchen window combined with overhead light, slightly overexposed on counter surface, mixed color temperature"
+      },
+      "camera": {
+        "description": "Counter height, very close, looking straight at her face and hands, raw amateur quality, vertical 9:16"
+      },
+      "frames": {
+        "start": {
+          "expression": "Focused, looking down at the cutting board, casual",
+          "pose": "Standing at counter, one hand on fruit, other hand picking up knife"
+        },
+        "peak": {
+          "expression": "Concentrated, slight smile of satisfaction",
+          "pose": "Mid-slice, knife pressing through fruit, other hand holding fruit steady"
+        }
+      }
+    }
+  }
+}
