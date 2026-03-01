@@ -31,6 +31,9 @@ The prompt MUST strongly instruct the model to maintain the EXACT same camera po
 The prompt must instruct the model to PRESERVE: room architecture (walls, windows, doors, ceiling height, room dimensions), camera position and angle, perspective and focal length, spatial proportions and depth.
 REPLACE ONLY: furniture, decor, colors, materials, textiles, lighting fixtures, and decorative objects.
 </principle>
+<principle name="CRITICAL: Room Function Preservation">
+The output must keep the original room type and purpose. A bedroom must remain a bedroom, a kitchen must remain a kitchen, and a bathroom must remain a bathroom. Do not convert spaces between room categories.
+</principle>
 </cognitive_framework>
 
 <instructions>
@@ -39,51 +42,49 @@ REPLACE ONLY: furniture, decor, colors, materials, textiles, lighting fixtures, 
 3. Return ONLY the final prompt string — no JSON, no explanation, just the prompt.
 4. The prompt should be 2-3 sentences, dense with specific visual details.
 5. ALWAYS include the camera preservation instruction as a separate emphatic sentence.
+6. ALWAYS include a room-function preservation instruction: keep the same room type and adapt style elements to that existing room.
 </instructions>
 
 <examples>
 User: "Japandi"
-Output: Redesign this room in Japandi style. Replace furniture with low-profile pieces in light white oak and pale ash wood, add wabi-sabi ceramics in warm earth tones, swap textiles for undyed linen and nubby cotton in cream and warm gray, introduce a paper lantern or rice-paper pendant light, add a single ikebana arrangement, use a muted palette of warm white walls with soft clay and sage accents. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length as the original photo — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. Photorealistic architectural photography, natural daylight.
+Output: Redesign this room in Japandi style. Replace furnishings with simple, low-profile pieces in light white oak and pale ash wood appropriate to the existing room function, add wabi-sabi ceramics in warm earth tones, swap textiles for undyed linen and nubby cotton in cream and warm gray, introduce a paper lantern or rice-paper pendant light, add a single ikebana arrangement, and use a muted palette of warm white walls with soft clay and sage accents. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length as the original photo — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. CRITICAL: Keep the same room type and purpose as the input image; do not convert the space to a different room category. Photorealistic architectural photography, natural daylight.
 
 User: "Industrial"
-Output: Redesign this room in Industrial style. Replace furniture with raw steel-frame pieces, a distressed leather sofa, and reclaimed wood shelving, expose or simulate brick walls and concrete flooring, swap lighting for Edison-bulb pendants on black iron pipe fixtures, add metal mesh accents and factory-style black-frame windows, use a palette of charcoal, rust, aged bronze, and weathered wood tones. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length as the original photo — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. Photorealistic architectural photography, dramatic natural light with warm tungsten accents.
+Output: Redesign this room in Industrial style. Replace furnishings with raw steel-frame and reclaimed-wood pieces appropriate to the existing room function, use concrete, brick, and weathered metal material cues where stylistically suitable, swap lighting for Edison-bulb fixtures on black iron hardware, add utilitarian accents and matte black detailing, and use a palette of charcoal, rust, aged bronze, and weathered wood tones. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length as the original photo — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. CRITICAL: Keep the same room type and purpose as the input image; do not convert the space to a different room category. Photorealistic architectural photography, dramatic natural light with warm tungsten accents.
 </examples>
 
 <task>
 The user will provide a style name (and optionally extra details). Return ONLY the rich prompt string.
 </task>`;
 
+const DIRECT_IMAGE_EDIT_SYSTEM_INSTRUCTION = `You are an expert interior designer and architectural photographer editing the provided room image.
+Apply the requested style with high specificity in materials, furniture forms, textiles, lighting, and decor.
+CRITICAL: Preserve exact camera position, viewing angle, perspective, focal length, and room geometry.
+CRITICAL: Preserve room function and category (bedroom stays bedroom, kitchen stays kitchen, bathroom stays bathroom).
+Only change design elements (furniture, decor, color palette, materials, textiles, fixtures); do not alter architecture.`;
+
 // ---------------------------------------------------------------------------
-// Prompt enrichment (two-step like CLI)
+// Generate refinement suggestions based on style + uploaded image context
 // ---------------------------------------------------------------------------
 
-async function enrichStylePrompt(style: string, customPrompt?: string): Promise<string> {
-  const userInput = customPrompt ? `${style} — ${customPrompt}` : style;
-
+export async function generateSuggestions(
+  imageBase64: string,
+  mimeType: string,
+  style: string
+): Promise<string[]> {
   const response = await ai.models.generateContent({
     model: PROMPT_MODEL,
-    contents: userInput,
-    config: {
-      systemInstruction: INTERIOR_DESIGN_SYSTEM_PROMPT,
-      temperature: 0.7,
-    },
-  });
-
-  const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-  if (!text) {
-    throw new Error("Failed to generate enriched prompt");
-  }
-  return text;
-}
-
-// ---------------------------------------------------------------------------
-// Generate refinement suggestions based on style
-// ---------------------------------------------------------------------------
-
-export async function generateSuggestions(style: string): Promise<string[]> {
-  const response = await ai.models.generateContent({
-    model: PROMPT_MODEL,
-    contents: `Given a room that was just restyled in "${style}" style, suggest exactly 4 short refinement prompts (5-8 words each) that a user might want to try. These should be specific to the ${style} aesthetic — things like changing specific furniture, adding style-appropriate decor, adjusting colors or materials. Return ONLY a JSON array of 4 strings, nothing else.`,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType, data: imageBase64 } },
+          {
+            text: `This is the current room image. The chosen style is "${style}". Suggest exactly 4 short refinement prompts (5-8 words each) tailored to what is actually visible in this room. Keep the same room type and function; do not suggest objects that would convert room category (for example, no sofa/coffee table suggestions for a bedroom unless already present). Focus on realistic decor, material, color, lighting, and furniture tweaks for this specific room. Return ONLY a JSON array of 4 strings, nothing else.`,
+          },
+        ],
+      },
+    ],
     config: {
       temperature: 0.8,
     },
@@ -122,11 +123,10 @@ export async function generateRestyledImage(
   style: string,
   customPrompt?: string
 ): Promise<{ image: string; text?: string; modelParts: RawPart[] }> {
-  // Step 1: Enrich the style into a detailed prompt
-  const prompt = await enrichStylePrompt(style, customPrompt);
-  console.log("Enriched prompt:", prompt);
+  const styleDirective = customPrompt
+    ? `Restyle this room in "${style}" style with these user preferences: ${customPrompt}.`
+    : `Restyle this room in "${style}" style.`;
 
-  // Step 2: Generate the image
   const response = await ai.models.generateContent({
     model: IMAGE_MODEL,
     contents: [
@@ -134,11 +134,14 @@ export async function generateRestyledImage(
         role: "user",
         parts: [
           { inlineData: { mimeType, data: imageBase64 } },
-          { text: prompt },
+          {
+            text: `${styleDirective} Adapt furniture and decor choices to the existing room function visible in the image. NON-NEGOTIABLE: Preserve the original room type and function from the source image (for example, a bedroom must remain a bedroom). Do not convert the space into a different room category. NON-NEGOTIABLE: Maintain the exact same camera position, viewing angle, perspective, focal length, and room geometry. Keep all walls, windows, doors, and dimensions identical.`,
+          },
         ],
       },
     ],
     config: {
+      systemInstruction: DIRECT_IMAGE_EDIT_SYSTEM_INSTRUCTION,
       responseModalities: ["TEXT", "IMAGE"],
     },
   });
@@ -160,16 +163,29 @@ export async function generateRefinedImage(
   message: string,
   currentImageBase64: string,
   currentImageMimeType: string
-): Promise<{ image: string; text?: string; modelParts: RawPart[] }> {
-  // Build full multi-turn contents: previous history + new user message
+): Promise<{ image: string; text?: string }> {
+  // IMPORTANT:
+  // Model thought parts/signatures are not safe to round-trip through JSON
+  // via the browser. Filter history to user turns only to avoid INVALID_ARGUMENT
+  // errors about missing thought_signature fields.
+  const safeHistory = (history || [])
+    .filter((turn) => turn?.role === "user" && Array.isArray(turn?.parts))
+    .map((turn) => ({
+      role: "user",
+      parts: (turn.parts as RawPart[]).filter((part) => part?.text || part?.inlineData),
+    }))
+    .filter((turn) => turn.parts.length > 0)
+    .slice(-6);
+
+  // Build full contents: safe prior user turns + new user message
   const contents = [
-    ...history,
+    ...safeHistory,
     {
       role: "user",
       parts: [
         { inlineData: { mimeType: currentImageMimeType, data: currentImageBase64 } },
         {
-          text: `Edit this room image: ${message}. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. Make only the requested changes. Photorealistic result.`,
+          text: `Edit this room image: ${message}. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. CRITICAL: Keep the original room type and purpose (for example, bedroom stays bedroom) and do not convert it into another room category. Make only the requested design changes. Photorealistic result.`,
         },
       ],
     },
@@ -183,7 +199,8 @@ export async function generateRefinedImage(
     },
   });
 
-  return extractImageFromResponse(response);
+  const { image, text } = extractImageFromResponse(response);
+  return { image, text };
 }
 
 // ---------------------------------------------------------------------------

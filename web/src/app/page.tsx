@@ -25,7 +25,13 @@ export default function Home() {
   const [currentStyle, setCurrentStyle] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  // Full Gemini conversation history for multi-turn refinement
+  // Undo stack: each entry is a snapshot before a refinement
+  const [undoStack, setUndoStack] = useState<
+    Array<{ image: string; messages: ChatMessage[]; history: ConversationTurn[] }>
+  >([]);
+
+  // User-only history passed to refine API.
+  // Server sanitizes history and avoids replaying model thought parts.
   const conversationHistory = useRef<ConversationTurn[]>([]);
 
   const handleImageSelected = useCallback(
@@ -37,6 +43,7 @@ export default function Home() {
       setError("");
       setCurrentStyle("");
       setSuggestions([]);
+      setUndoStack([]);
       conversationHistory.current = [];
     },
     []
@@ -51,6 +58,7 @@ export default function Home() {
       setChatMessages([]);
       setCurrentStyle(style);
       setSuggestions([]);
+      setUndoStack([]);
       conversationHistory.current = [];
 
       try {
@@ -69,9 +77,7 @@ export default function Home() {
         if (!res.ok) throw new Error(data.error || "Generation failed");
         setRestyledImage(data.image);
 
-        // Seed conversation history with the initial restyle exchange.
-        // Model parts include thought_signatures required by gemini-3.1-flash
-        // for multi-turn — we must pass them back verbatim.
+        // Seed user-only history for future refine calls.
         conversationHistory.current = [
           {
             role: "user",
@@ -79,10 +85,6 @@ export default function Home() {
               { inlineData: { mimeType: originalMimeType, data: originalImage } },
               { text: `Restyle this room in ${style} style.` },
             ],
-          },
-          {
-            role: "model",
-            parts: data.modelParts,
           },
         ];
 
@@ -103,9 +105,29 @@ export default function Home() {
     [originalImage, originalMimeType]
   );
 
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setRestyledImage(prev.image);
+    setChatMessages(prev.messages);
+    conversationHistory.current = prev.history;
+    setUndoStack((stack) => stack.slice(0, -1));
+  }, [undoStack]);
+
   const handleRefine = useCallback(
     async (message: string) => {
       if (!restyledImage) return;
+
+      // Snapshot current state for undo
+      setUndoStack((stack) => [
+        ...stack,
+        {
+          image: restyledImage,
+          messages: chatMessages,
+          history: [...conversationHistory.current],
+        },
+      ]);
+
       setChatMessages((prev) => [...prev, { role: "user", text: message }]);
       setIsGenerating(true);
       setError("");
@@ -125,21 +147,14 @@ export default function Home() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Refinement failed");
 
-        // Append this exchange to conversation history.
-        // Use raw modelParts to preserve thought_signatures.
-        conversationHistory.current.push(
-          {
-            role: "user",
-            parts: [
-              { inlineData: { mimeType: "image/png", data: restyledImage } },
-              { text: `Edit this room image: ${message}. Keep the same room layout and camera angle. Make only the requested changes. Photorealistic result.` },
-            ],
-          },
-          {
-            role: "model",
-            parts: data.modelParts,
-          }
-        );
+        // Append user-only refine turn; server composes full prompt.
+        conversationHistory.current.push({
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "image/png", data: restyledImage } },
+            { text: `Edit this room image: ${message}` },
+          ],
+        });
 
         setRestyledImage(data.image);
         if (data.text) {
@@ -160,7 +175,7 @@ export default function Home() {
         setIsGenerating(false);
       }
     },
-    [restyledImage]
+    [restyledImage, chatMessages]
   );
 
   return (
@@ -249,6 +264,31 @@ export default function Home() {
               </div>
 
               <BeforeAfter before={originalImage} after={restyledImage} />
+
+              {/* Undo button */}
+              {undoStack.length > 0 && !isGenerating && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={handleUndo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-warm-gray border border-warm-gray/15 rounded-full hover:border-warm-gray/40 hover:text-cream transition-all duration-200 cursor-pointer"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
+                      />
+                    </svg>
+                    Undo last change
+                  </button>
+                </div>
+              )}
 
               {isGenerating && (
                 <div className="mt-6 border border-warm-gray/10 rounded-lg">

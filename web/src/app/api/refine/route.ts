@@ -20,11 +20,10 @@ export async function POST(req: NextRequest) {
       currentImageMimeType || "image/png"
     );
 
-    // Return image, text, and raw model parts (with thought_signatures)
+    // Return image and optional text response
     return NextResponse.json({
       image: result.image,
       text: result.text,
-      modelParts: result.modelParts,
     });
   } catch (error) {
     console.error("Refine error:", error);

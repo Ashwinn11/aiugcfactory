@@ -12,11 +12,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Run image generation and suggestion generation in parallel
-    const [result, suggestions] = await Promise.all([
-      generateRestyledImage(image, mimeType || "image/jpeg", style, customPrompt),
-      generateSuggestions(customPrompt ? `${style} — ${customPrompt}` : style),
-    ]);
+    // Generate the restyled image first, then generate suggestions from
+    // the actual restyled output so suggestions match what users see.
+    const result = await generateRestyledImage(
+      image,
+      mimeType || "image/jpeg",
+      style,
+      customPrompt
+    );
+
+    let suggestions: string[] = [];
+    try {
+      suggestions = await generateSuggestions(
+        result.image,
+        "image/png",
+        customPrompt ? `${style} — ${customPrompt}` : style
+      );
+    } catch {
+      suggestions = [];
+    }
 
     return NextResponse.json({
       image: result.image,
