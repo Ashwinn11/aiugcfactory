@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #F5F0EB;
+  --color-cream-dark: #EBE4DC;
+  --color-charcoal: #1C1917;
+  --color-charcoal-light: #292524;
+  --color-warm-gray: #78716C;
+  --color-warm-gray-light: #A8A29E;
+  --color-terracotta: #C4653A;
+  --color-terracotta-light: #D4845F;
+  --color-sage: #8B9B7E;
+  --color-sage-light: #A8B59E;
+
+  --font-display: "Playfair Display", "Georgia", serif;
+  --font-body: "Outfit", "Helvetica Neue", sans-serif;
+}
+
+/* Grain texture overlay */
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Stagger entrance animations */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Pulsing glow for loading */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(196, 101, 58, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(196, 101, 58, 0.3);
+  }
+}
+
+/* Custom scrollbar for chat */
+.chat-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-warm-gray-light);
+  border-radius: 2px;
+}
