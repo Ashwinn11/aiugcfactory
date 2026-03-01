@@ -8,16 +8,16 @@
       "peak": "Tears streaming down cheeks, eyes red and puffy, mouth open in a sob, free hand wiping eyes, hunched forward"
     },
     "eating": {
-      "scene": "At small kitchen table, bowl of fruits in front of her, messy weekday lunch, afternoon",
+      "scene": "Sitting at small kitchen table, messy weekday lunch, afternoon light",
       "video_prompt": "She picks up the spoon, scoops food from the bowl, and takes a bite. She chews slowly and naturally. Smooth hand movements, background stays still.",
-      "start": "Relaxed expression, free hand resting near bowl of fruits, sitting at table",
-      "peak": "Free hand holding spoon near mouth mid-bite, eyes half-closed in enjoyment"
+      "start": "Relaxed expression, free hand holding a spoon, kitchen table and bowl of fruits visible below in background",
+      "peak": "Free hand holding spoon of food up near her mouth mid-bite, eyes half-closed in enjoyment, looking at camera"
     },
     "cutting_fruits": {
-      "scene": "In kitchen, cutting board with fruits visible on counter beside her, bright afternoon",
+      "scene": "Standing in kitchen, bright afternoon light",
       "video_prompt": "She picks up the knife and carefully slices a piece of fruit on the cutting board. Smooth precise hand movements. She places the sliced piece aside. Background stays still.",
-      "start": "Casual smile, free hand resting on counter near cutting board with fruits and knife",
-      "peak": "Free hand holding up a freshly cut piece of fruit, slight smile of satisfaction"
+      "start": "Casual smile, free hand holding a piece of fruit, kitchen counter and cutting board visible behind her",
+      "peak": "Free hand holding up a freshly cut piece of fruit toward camera, slight smile of satisfaction"
     }
   }
 }

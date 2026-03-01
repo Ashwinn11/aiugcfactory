@@ -2,3 +2,4 @@ test_outputs/
 .env
 __pycache__/
 *.pyc
+outputs/
