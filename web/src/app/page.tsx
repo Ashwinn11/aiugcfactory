@@ -686,10 +686,7 @@ export default function Home() {
                   )}
 
                   <div className="flex items-center gap-2">
-                    <DownloadButton
-                      beforeImage={originalImage}
-                      afterImage={restyledImage}
-                    />
+                    <DownloadButton image={restyledImage} />
 
                     {versions.length > 0 && mode !== "paint" && (
                       <>
