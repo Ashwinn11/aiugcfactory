@@ -1,19 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateRestyledImage } from "@/lib/gemini";
+import {
+  generateRestyledImage,
+  generatePaintedImage,
+} from "@/lib/gemini";
+import type { AppMode } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   try {
-    const { image, mimeType, style, customPrompt } = await req.json();
+    const { image, mimeType, style, customPrompt, mode, colorHex, finish } =
+      await req.json();
 
-    if (!image || !style) {
+    const appMode: AppMode = mode || "restyle";
+
+    if (!image) {
       return NextResponse.json(
-        { error: "Missing image or style" },
+        { error: "Missing image" },
         { status: 400 }
       );
     }
 
-    // Fast path: return immediately after image generation.
-    const result = await generateRestyledImage(image, mimeType || "image/jpeg", style, customPrompt);
+    const mime = mimeType || "image/jpeg";
+    let result: { image: string; text?: string; modelParts: unknown[] };
+
+    switch (appMode) {
+      case "paint":
+        if (!colorHex) {
+          return NextResponse.json(
+            { error: "Missing color" },
+            { status: 400 }
+          );
+        }
+        result = await generatePaintedImage(
+          image,
+          mime,
+          colorHex,
+          finish || "Matte"
+        );
+        break;
+
+      default:
+        if (!style) {
+          return NextResponse.json(
+            { error: "Missing style" },
+            { status: 400 }
+          );
+        }
+        result = await generateRestyledImage(image, mime, style, customPrompt);
+        break;
+    }
 
     return NextResponse.json({
       image: result.image,

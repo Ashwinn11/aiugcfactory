@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import type { ChatMessage, ElementFilter } from "@/lib/types";
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-}
+const ELEMENT_FILTERS: { key: ElementFilter; label: string }[] = [
+  { key: null, label: "All" },
+  { key: "walls", label: "Walls only" },
+  { key: "floor", label: "Floor only" },
+  { key: "furniture", label: "Furniture only" },
+];
 
 interface ChatRefineProps {
-  onSendMessage: (message: string) => Promise<void>;
+  onSendMessage: (message: string, elementFilter?: ElementFilter) => Promise<void>;
   messages: ChatMessage[];
   isLoading: boolean;
   suggestions: string[];
@@ -21,6 +24,7 @@ export default function ChatRefine({
   suggestions,
 }: ChatRefineProps) {
   const [input, setInput] = useState("");
+  const [activeFilter, setActiveFilter] = useState<ElementFilter>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,13 +37,17 @@ export default function ChatRefine({
     e.preventDefault();
     const msg = input.trim();
     if (!msg || isLoading) return;
+    const filter = activeFilter;
     setInput("");
-    await onSendMessage(msg);
+    setActiveFilter(null);
+    await onSendMessage(msg, filter);
   };
 
   const handleSuggestion = (text: string) => {
     if (isLoading) return;
-    onSendMessage(text);
+    const filter = activeFilter;
+    setActiveFilter(null);
+    onSendMessage(text, filter);
   };
 
   return (
@@ -51,6 +59,9 @@ export default function ChatRefine({
         </h3>
         <div className="h-px flex-1 bg-warm-gray/30" />
       </div>
+      <p className="text-[11px] text-warm-gray-light/70">
+        Describe what you want to change in plain language. Each edit creates a new version you can undo.
+      </p>
 
       {/* Quick suggestions */}
       {suggestions.length > 0 && (
@@ -103,6 +114,33 @@ export default function ChatRefine({
           )}
         </div>
       )}
+
+      {/* Element filter pills */}
+      <div className="space-y-1.5">
+        <p className="text-[10px] uppercase tracking-[0.15em] text-warm-gray-light">
+          Focus on
+        </p>
+        <p className="text-[11px] text-warm-gray-light/70 mb-1">
+          Limit your edit to a specific part of the room. &quot;All&quot; lets AI change anything. Resets after each message.
+        </p>
+        <div className="flex gap-1.5 flex-wrap">
+          {ELEMENT_FILTERS.map((f) => (
+            <button
+              key={f.label}
+              type="button"
+              onClick={() => setActiveFilter(f.key)}
+              disabled={isLoading}
+              className={`px-3 py-1.5 text-[11px] rounded-full border transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-terracotta/60 ${
+                activeFilter === f.key
+                  ? "border-terracotta bg-terracotta/20 text-cream"
+                  : "border-warm-gray/30 text-warm-gray-light hover:border-warm-gray/50 hover:text-cream"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="flex gap-3 items-stretch sm:items-end">

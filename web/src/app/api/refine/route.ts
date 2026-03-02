@@ -3,7 +3,7 @@ import { generateRefinedImage } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
-    const { history, message, currentImage, currentImageMimeType } =
+    const { history, message, currentImage, currentImageMimeType, elementFilter } =
       await req.json();
 
     if (!currentImage || !message) {
@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
       history || [],
       message,
       currentImage,
-      currentImageMimeType || "image/png"
+      currentImageMimeType || "image/png",
+      elementFilter || null
     );
 
     // Return image and optional text response

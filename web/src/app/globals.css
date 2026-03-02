@@ -59,6 +59,20 @@
   }
 }
 
+/* Skeleton loading pulse */
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.skeleton-pulse {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
 /* Custom scrollbar for chat */
 .chat-scroll::-webkit-scrollbar {
   width: 4px;

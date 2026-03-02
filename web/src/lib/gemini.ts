@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import type { ElementFilter, MoodBoardData } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
 
@@ -62,6 +63,9 @@ Apply the requested style with high specificity in materials, furniture forms, t
 CRITICAL: Preserve exact camera position, viewing angle, perspective, focal length, and room geometry.
 CRITICAL: Preserve room function and category (bedroom stays bedroom, kitchen stays kitchen, bathroom stays bathroom).
 Only change design elements (furniture, decor, color palette, materials, textiles, fixtures); do not alter architecture.`;
+
+const REFINE_SYSTEM_INSTRUCTION = `You are an expert interior designer editing room photos. You MUST return an edited image.
+RULES: Preserve everything the user did not ask to change — same position, size, proportion. When adding items, place them in empty space; never clip or overlap existing furniture. Keep the exact same camera angle, perspective, and room geometry. Maintain realistic physics, lighting, and shadows.`;
 
 // ---------------------------------------------------------------------------
 // Generate refinement suggestions based on style + uploaded image context
@@ -162,18 +166,29 @@ export async function generateRefinedImage(
   history: ConversationTurn[],
   message: string,
   currentImageBase64: string,
-  currentImageMimeType: string
+  currentImageMimeType: string,
+  elementFilter?: ElementFilter
 ): Promise<{ image: string; text?: string }> {
   // Keep refine single-turn against the latest image only.
   // Replaying older image turns can cause the model to recompose camera framing.
   void history;
+
+  let filterPrefix = "";
+  if (elementFilter === "walls") {
+    filterPrefix = "Change ONLY the walls. Do NOT modify furniture, flooring, or any other elements. ";
+  } else if (elementFilter === "floor") {
+    filterPrefix = "Change ONLY the flooring. Do NOT modify walls, furniture, or any other elements. ";
+  } else if (elementFilter === "furniture") {
+    filterPrefix = "Change ONLY the furniture. Do NOT modify walls, flooring, or any other elements. ";
+  }
+
   const contents = [
     {
       role: "user",
       parts: [
         { inlineData: { mimeType: currentImageMimeType, data: currentImageBase64 } },
         {
-          text: `Edit this exact room image: ${message}. NON-NEGOTIABLE: Keep the camera LOCKED to the exact same tripod position, viewing angle, perspective, horizon line, vanishing points, crop, and focal length. Do NOT recompose, zoom, rotate, tilt, pan, or change framing. Keep all walls, windows, doors, floor plan, and room dimensions pixel-aligned with the input. Keep the same room type and purpose (for example, bedroom stays bedroom). Change only the requested design elements and preserve everything else.`,
+          text: `${filterPrefix}Edit this room image: ${message}. Keep everything else unchanged. Same camera angle, same room layout.`,
         },
       ],
     },
@@ -183,12 +198,141 @@ export async function generateRefinedImage(
     model: IMAGE_MODEL,
     contents,
     config: {
+      systemInstruction: REFINE_SYSTEM_INSTRUCTION,
       responseModalities: ["TEXT", "IMAGE"],
     },
   });
 
   const { image, text } = extractImageFromResponse(response);
   return { image, text };
+}
+
+// ---------------------------------------------------------------------------
+// Stage empty room (furnish an empty/unfurnished room)
+// ---------------------------------------------------------------------------
+
+const STAGE_ROOM_SYSTEM_INSTRUCTION = `You are an expert interior designer and architectural photographer specializing in virtual staging.
+You take photos of empty or unfurnished rooms and furnish them with stylistically cohesive furniture, textiles, lighting, and decor.
+CRITICAL: Preserve exact camera position, viewing angle, perspective, focal length, and room geometry.
+CRITICAL: Preserve room function and category. Only ADD furnishings — do not alter architecture.`;
+
+export async function generateStagedImage(
+  imageBase64: string,
+  mimeType: string,
+  style: string,
+  customPrompt?: string
+): Promise<{ image: string; text?: string; modelParts: RawPart[] }> {
+  const styleDirective = customPrompt
+    ? `Furnish this empty room in "${style}" style with these preferences: ${customPrompt}.`
+    : `Furnish this empty room in "${style}" style.`;
+
+  const response = await ai.models.generateContent({
+    model: IMAGE_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType, data: imageBase64 } },
+          {
+            text: `${styleDirective} This is an empty or unfurnished room. Add appropriate furniture, textiles, lighting, and decor that match the style. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length as the original photo — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. Photorealistic architectural photography, natural daylight.`,
+          },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: STAGE_ROOM_SYSTEM_INSTRUCTION,
+      responseModalities: ["TEXT", "IMAGE"],
+    },
+  });
+
+  return extractImageFromResponse(response);
+}
+
+// ---------------------------------------------------------------------------
+// Paint walls (change wall color only)
+// ---------------------------------------------------------------------------
+
+const PAINT_WALLS_SYSTEM_INSTRUCTION = `You are an expert interior painter and architectural photographer.
+You change ONLY the wall color and finish in room photos. Everything else must remain completely untouched.
+CRITICAL: Preserve exact camera position, viewing angle, perspective, focal length, and room geometry.
+CRITICAL: Keep ALL furniture, decor, flooring, fixtures, windows, doors, and trim identical. Only walls change.`;
+
+export async function generatePaintedImage(
+  imageBase64: string,
+  mimeType: string,
+  colorHex: string,
+  finish: string
+): Promise<{ image: string; text?: string; modelParts: RawPart[] }> {
+  const response = await ai.models.generateContent({
+    model: IMAGE_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType, data: imageBase64 } },
+          {
+            text: `Change ONLY the wall color to ${colorHex} with a ${finish} finish. Keep ALL furniture, decor, flooring, fixtures, windows, doors, and trim completely identical. Do not add or remove any objects. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length as the original photo. Photorealistic result with accurate paint color rendering.`,
+          },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: PAINT_WALLS_SYSTEM_INSTRUCTION,
+      responseModalities: ["TEXT", "IMAGE"],
+    },
+  });
+
+  return extractImageFromResponse(response);
+}
+
+// ---------------------------------------------------------------------------
+// Mood board analysis (extract palette, materials, styles from restyled image)
+// ---------------------------------------------------------------------------
+
+export async function generateMoodBoard(
+  imageBase64: string,
+  mimeType: string
+): Promise<MoodBoardData> {
+  const response = await ai.models.generateContent({
+    model: PROMPT_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType, data: imageBase64 } },
+          {
+            text: `Analyze this interior design image and extract a mood board. Return ONLY a JSON object with exactly this structure (no markdown, no explanation):
+{
+  "colors": [{"hex": "#XXXXXX", "name": "Color Name"}],
+  "materials": ["material1", "material2"],
+  "furnitureStyles": ["style1", "style2"],
+  "summary": "A 1-2 sentence description of the overall design aesthetic."
+}
+Include 4-6 dominant colors, 3-5 materials, and 2-4 furniture style descriptors.`,
+          },
+        ],
+      },
+    ],
+    config: {
+      temperature: 0.4,
+    },
+  });
+
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!text) {
+    return { colors: [], materials: [], furnitureStyles: [], summary: "" };
+  }
+
+  try {
+    let cleaned = text;
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.split("\n").slice(1).join("\n");
+      cleaned = cleaned.replace(/```\s*$/, "").trim();
+    }
+    return JSON.parse(cleaned) as MoodBoardData;
+  } catch {
+    return { colors: [], materials: [], furnitureStyles: [], summary: text };
+  }
 }
 
 // ---------------------------------------------------------------------------
