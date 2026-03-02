@@ -1,12 +1,6 @@
 test_outputs/
 .env
-cli/__pycache__/
-cli/.venv/
 *.pyc
 outputs/
-web/node_modules/
-web/.next/
-
-web/.env
-
-cli/.env
+.venv/
+__pycache__/*
