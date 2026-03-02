@@ -25,10 +25,14 @@ export default function Home() {
   const [currentStyle, setCurrentStyle] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  // Undo stack: each entry is a snapshot before a refinement
-  const [undoStack, setUndoStack] = useState<
-    Array<{ image: string; messages: ChatMessage[]; history: ConversationTurn[] }>
-  >([]);
+  // Version history for undo/redo
+  interface Snapshot {
+    image: string;
+    messages: ChatMessage[];
+    history: ConversationTurn[];
+  }
+  const [versions, setVersions] = useState<Snapshot[]>([]);
+  const [versionIndex, setVersionIndex] = useState(-1); // -1 = current (latest)
 
   // User-only history passed to refine API.
   // Server sanitizes history and avoids replaying model thought parts.
@@ -45,7 +49,8 @@ export default function Home() {
       setError("");
       setCurrentStyle("");
       setSuggestions([]);
-      setUndoStack([]);
+      setVersions([]);
+      setVersionIndex(-1);
       conversationHistory.current = [];
     },
     []
@@ -61,7 +66,8 @@ export default function Home() {
       setChatMessages([]);
       setCurrentStyle(style);
       setSuggestions([]);
-      setUndoStack([]);
+      setVersions([]);
+      setVersionIndex(-1);
       conversationHistory.current = [];
 
       try {
@@ -82,7 +88,7 @@ export default function Home() {
         setRestyledImage(data.image);
 
         // Seed user-only history for future refine calls.
-        conversationHistory.current = [
+        const initialHistory = [
           {
             role: "user",
             parts: [
@@ -91,10 +97,20 @@ export default function Home() {
             ],
           },
         ];
+        conversationHistory.current = initialHistory;
 
-        if (data.text) {
-          setChatMessages([{ role: "assistant", text: data.text }]);
-        }
+        const initialMessages: ChatMessage[] = data.text
+          ? [{ role: "assistant", text: data.text }]
+          : [];
+        setChatMessages(initialMessages);
+
+        // Save initial restyle as version 0 (so undo from first refinement restores this)
+        setVersions([{
+          image: data.image,
+          messages: initialMessages,
+          history: [...initialHistory],
+        }]);
+        setVersionIndex(-1);
 
         // Fetch suggestions after the image is shown so restyle latency stays low.
         void (async () => {
@@ -133,28 +149,48 @@ export default function Home() {
     [originalImage, originalMimeType]
   );
 
+  const canUndo = versionIndex > 0 || (versionIndex === -1 && versions.length > 0);
+  const canRedo = versionIndex >= 0 && versionIndex < versions.length - 1;
+
+  const navigateVersion = useCallback(
+    (index: number) => {
+      const snap = versions[index];
+      if (!snap) return;
+      setVersionIndex(index);
+      setRestyledImage(snap.image);
+      setChatMessages(snap.messages);
+      conversationHistory.current = [...snap.history];
+    },
+    [versions]
+  );
+
   const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const prev = undoStack[undoStack.length - 1];
-    setRestyledImage(prev.image);
-    setChatMessages(prev.messages);
-    conversationHistory.current = prev.history;
-    setUndoStack((stack) => stack.slice(0, -1));
-  }, [undoStack]);
+    if (!canUndo) return;
+    // If we're at the latest (index === -1), go to last saved version
+    const target = versionIndex === -1 ? versions.length - 2 : versionIndex - 1;
+    if (target >= 0) navigateVersion(target);
+  }, [canUndo, versionIndex, versions.length, navigateVersion]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    navigateVersion(versionIndex + 1);
+  }, [canRedo, versionIndex, navigateVersion]);
 
   const handleRefine = useCallback(
     async (message: string) => {
       if (!restyledImage) return;
 
-      // Snapshot current state for undo
-      setUndoStack((stack) => [
-        ...stack,
-        {
-          image: restyledImage,
-          messages: chatMessages,
-          history: [...conversationHistory.current],
-        },
-      ]);
+      // If user refined after undoing, truncate future versions
+      const currentVersions =
+        versionIndex === -1 ? versions : versions.slice(0, versionIndex + 1);
+
+      // Save current state as a version
+      const snapshot: Snapshot = {
+        image: restyledImage,
+        messages: [...chatMessages],
+        history: [...conversationHistory.current],
+      };
+      const newVersions = [...currentVersions, snapshot];
 
       setChatMessages((prev) => [...prev, { role: "user", text: message }]);
       setIsGenerating(true);
@@ -184,13 +220,28 @@ export default function Home() {
           ],
         });
 
+        // Save the new result as the latest version
+        const newMessages = data.text
+          ? [...chatMessages, { role: "user" as const, text: message }, { role: "assistant" as const, text: data.text }]
+          : [...chatMessages, { role: "user" as const, text: message }];
+
+        const resultSnapshot: Snapshot = {
+          image: data.image,
+          messages: newMessages,
+          history: [...conversationHistory.current, {
+            role: "user",
+            parts: [
+              { inlineData: { mimeType: "image/png", data: restyledImage } },
+              { text: `Edit this room image: ${message}` },
+            ],
+          }],
+        };
+
+        conversationHistory.current = resultSnapshot.history;
         setRestyledImage(data.image);
-        if (data.text) {
-          setChatMessages((prev) => [
-            ...prev,
-            { role: "assistant", text: data.text },
-          ]);
-        }
+        setChatMessages(newMessages);
+        setVersions([...newVersions, resultSnapshot]);
+        setVersionIndex(-1); // -1 means "at latest"
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Something went wrong"
@@ -199,11 +250,13 @@ export default function Home() {
           ...prev,
           { role: "assistant", text: "Failed to refine. Try again." },
         ]);
+        // Restore versions without the failed attempt's pre-snapshot
+        setVersions(currentVersions);
       } finally {
         setIsGenerating(false);
       }
     },
-    [restyledImage, chatMessages]
+    [restyledImage, chatMessages, versions, versionIndex]
   );
 
   return (
@@ -286,28 +339,32 @@ export default function Home() {
 
               <BeforeAfter before={originalImage} after={restyledImage} />
 
-              {/* Undo button */}
-              {undoStack.length > 0 && !isGenerating && (
-                <div className="mt-4 flex justify-end">
+              {/* Undo / Redo controls */}
+              {versions.length > 0 && !isGenerating && (
+                <div className="mt-4 flex items-center justify-end gap-2">
                   <button
                     onClick={handleUndo}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cream border border-warm-gray/40 bg-charcoal rounded-full hover:border-terracotta hover:bg-terracotta/20 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-terracotta/60"
+                    disabled={!canUndo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cream border border-warm-gray/40 bg-charcoal rounded-full hover:border-terracotta hover:bg-terracotta/20 transition-all duration-150 cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-terracotta/60"
                   >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
-                      />
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                     </svg>
-                    Undo last change
+                    Undo
                   </button>
+                  <button
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cream border border-warm-gray/40 bg-charcoal rounded-full hover:border-terracotta hover:bg-terracotta/20 transition-all duration-150 cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-terracotta/60"
+                  >
+                    Redo
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" />
+                    </svg>
+                  </button>
+                  <span className="text-[10px] text-warm-gray/40 ml-1">
+                    {versionIndex === -1 ? versions.length : versionIndex + 1} / {versions.length}
+                  </span>
                 </div>
               )}
 
