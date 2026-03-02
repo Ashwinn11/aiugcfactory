@@ -43,28 +43,33 @@ export default function ChatRefine({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 bg-charcoal-light border border-warm-gray/30 rounded-lg p-4 sm:p-5">
       <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-warm-gray/10" />
-        <h3 className="text-[10px] uppercase tracking-[0.2em] text-warm-gray font-medium">
+        <div className="h-px flex-1 bg-warm-gray/30" />
+        <h3 className="text-[10px] uppercase tracking-[0.2em] text-warm-gray-light font-medium">
           Refine your design
         </h3>
-        <div className="h-px flex-1 bg-warm-gray/10" />
+        <div className="h-px flex-1 bg-warm-gray/30" />
       </div>
 
-      {/* Quick suggestions when no messages yet */}
-      {messages.length === 0 && suggestions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+      {/* Quick suggestions */}
+      {suggestions.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] uppercase tracking-[0.15em] text-warm-gray-light">
+            Quick ideas
+          </p>
+          <div className="flex flex-wrap gap-2">
           {suggestions.map((s) => (
             <button
               key={s}
               onClick={() => handleSuggestion(s)}
               disabled={isLoading}
-              className="px-3 py-1.5 text-xs text-warm-gray border border-warm-gray/15 rounded-full hover:border-warm-gray/40 hover:text-cream transition-all duration-200 cursor-pointer disabled:opacity-30"
+              className="px-4 py-2 min-h-10 text-sm sm:text-xs text-cream border border-warm-gray/40 bg-charcoal rounded-full hover:border-terracotta hover:bg-terracotta/20 transition-all duration-150 cursor-pointer disabled:opacity-30 focus:outline-none focus:ring-2 focus:ring-terracotta/60"
             >
               {s}
             </button>
           ))}
+          </div>
         </div>
       )}
 
@@ -77,18 +82,18 @@ export default function ChatRefine({
           {messages.map((msg, i) => (
             <div
               key={i}
-              className={`text-sm px-4 py-2.5 max-w-[85%] w-fit animate-fade-up ${
+              className={`text-sm px-4 py-2.5 max-w-[92%] sm:max-w-[85%] w-fit animate-fade-up ${
                 msg.role === "user"
-                  ? "ml-auto bg-terracotta/15 text-cream border border-terracotta/20 rounded-2xl rounded-br-sm"
-                  : "bg-charcoal-light text-warm-gray-light border border-warm-gray/10 rounded-2xl rounded-bl-sm"
+                  ? "ml-auto bg-terracotta/30 text-cream border border-terracotta/50 rounded-2xl rounded-br-sm"
+                  : "bg-charcoal text-cream border border-warm-gray/35 rounded-2xl rounded-bl-sm"
               }`}
-              style={{ animationDelay: `${i * 50}ms` }}
+              style={{ animationDelay: `${i * 24}ms` }}
             >
               {msg.text}
             </div>
           ))}
           {isLoading && (
-            <div className="bg-charcoal-light text-warm-gray border border-warm-gray/10 rounded-2xl rounded-bl-sm px-4 py-2.5 w-fit text-sm">
+            <div className="bg-charcoal text-warm-gray-light border border-warm-gray/30 rounded-2xl rounded-bl-sm px-4 py-2.5 w-fit text-sm">
               <span className="inline-flex gap-1">
                 <span className="w-1.5 h-1.5 bg-warm-gray/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-warm-gray/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -100,22 +105,22 @@ export default function ChatRefine({
       )}
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+      <form onSubmit={handleSubmit} className="flex gap-3 items-stretch sm:items-end">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Describe a change..."
           disabled={isLoading}
-          className="flex-1 bg-transparent border-b border-warm-gray/20 focus:border-terracotta px-0 py-3 text-sm text-cream placeholder:text-warm-gray/30 focus:outline-none transition-colors disabled:opacity-40"
+          className="flex-1 bg-charcoal border border-warm-gray/40 focus:border-terracotta rounded-md px-3 py-3 text-sm text-cream placeholder:text-warm-gray-light/70 focus:outline-none focus:ring-2 focus:ring-terracotta/40 transition-colors disabled:opacity-40"
         />
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
-          className="group relative p-2.5 text-warm-gray hover:text-terracotta disabled:text-warm-gray/20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+          className="group relative min-w-11 min-h-11 p-2.5 rounded-md bg-terracotta text-cream hover:bg-terracotta-light disabled:bg-warm-gray/40 disabled:text-warm-gray/90 transition-colors cursor-pointer disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-terracotta/60"
         >
           <svg
-            className="w-5 h-5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+            className="w-5 h-5 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

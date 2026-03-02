@@ -207,35 +207,35 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-charcoal flex flex-col">
       {/* Header */}
-      <header className="border-b border-warm-gray/10">
-        <div className="max-w-5xl mx-auto px-6 py-6 flex items-end justify-between">
+      <header className="border-b border-warm-gray/25 bg-charcoal-light">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 sm:py-6 flex items-end justify-between">
           <div>
             <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-cream">
               Room Restyler
             </h1>
-            <p className="text-warm-gray text-sm mt-1 font-light">
+            <p className="text-warm-gray-light text-sm mt-1 font-light">
               Reimagine any space in a new design language
             </p>
           </div>
-          <div className="hidden sm:flex items-center gap-1.5 text-warm-gray/40 text-[10px] uppercase tracking-[0.15em]">
+          <div className="hidden sm:flex items-center gap-1.5 text-warm-gray-light text-[10px] uppercase tracking-[0.15em]">
             <div className="w-1.5 h-1.5 rounded-full bg-sage/60" />
             Powered by Gemini
           </div>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-10">
-        <div className="space-y-10">
+      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        <div className="w-full space-y-6 sm:space-y-10">
           {/* Step 1: Upload */}
-          <section className="animate-fade-up">
+          <section className="w-full animate-fade-up bg-charcoal-light border border-warm-gray/30 rounded-xl p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-5">
               <span className="text-[10px] uppercase tracking-[0.2em] text-terracotta font-medium">
                 01
               </span>
-              <div className="h-px flex-1 bg-warm-gray/10" />
-              <span className="text-[10px] uppercase tracking-[0.2em] text-warm-gray/40">
+              <div className="h-px flex-1 bg-warm-gray/30" />
+              <span className="text-[10px] uppercase tracking-[0.2em] text-warm-gray-light">
                 Upload
               </span>
             </div>
@@ -247,13 +247,13 @@ export default function Home() {
 
           {/* Step 2: Style */}
           {originalImage && (
-            <section className="animate-fade-up" style={{ animationDelay: "100ms" }}>
+            <section className="w-full animate-fade-up bg-charcoal-light border border-warm-gray/30 rounded-xl p-4 sm:p-6" style={{ animationDelay: "40ms" }}>
               <div className="flex items-center gap-3 mb-5">
                 <span className="text-[10px] uppercase tracking-[0.2em] text-terracotta font-medium">
                   02
                 </span>
-                <div className="h-px flex-1 bg-warm-gray/10" />
-                <span className="text-[10px] uppercase tracking-[0.2em] text-warm-gray/40">
+                <div className="h-px flex-1 bg-warm-gray/30" />
+                <span className="text-[10px] uppercase tracking-[0.2em] text-warm-gray-light">
                   Style
                 </span>
               </div>
@@ -273,13 +273,13 @@ export default function Home() {
 
           {/* Step 3: Results */}
           {restyledImage && (
-            <section className="animate-fade-up" style={{ animationDelay: "100ms" }}>
+            <section className="w-full animate-fade-up bg-charcoal-light border border-warm-gray/30 rounded-xl p-4 sm:p-6" style={{ animationDelay: "40ms" }}>
               <div className="flex items-center gap-3 mb-5">
                 <span className="text-[10px] uppercase tracking-[0.2em] text-terracotta font-medium">
                   03
                 </span>
-                <div className="h-px flex-1 bg-warm-gray/10" />
-                <span className="text-[10px] uppercase tracking-[0.2em] text-warm-gray/40">
+                <div className="h-px flex-1 bg-warm-gray/30" />
+                <span className="text-[10px] uppercase tracking-[0.2em] text-warm-gray-light">
                   {currentStyle}
                 </span>
               </div>
@@ -291,7 +291,7 @@ export default function Home() {
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={handleUndo}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-warm-gray border border-warm-gray/15 rounded-full hover:border-warm-gray/40 hover:text-cream transition-all duration-200 cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-cream border border-warm-gray/40 bg-charcoal rounded-full hover:border-terracotta hover:bg-terracotta/20 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-terracotta/60"
                   >
                     <svg
                       className="w-3.5 h-3.5"
@@ -332,8 +332,8 @@ export default function Home() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-warm-gray/5 mt-20">
-        <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between text-[10px] uppercase tracking-[0.15em] text-warm-gray/30">
+      <footer className="border-t border-warm-gray/25 mt-auto bg-charcoal-light">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex items-center justify-between text-[10px] uppercase tracking-[0.15em] text-warm-gray-light">
           <span>Room Restyler</span>
           <span>AI Interior Design</span>
         </div>

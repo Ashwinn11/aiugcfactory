@@ -40,7 +40,13 @@
 }
 
 .animate-fade-up {
-  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-up 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (max-width: 640px) {
+  .animate-fade-up {
+    animation-duration: 0.3s;
+  }
 }
 
 /* Pulsing glow for loading */

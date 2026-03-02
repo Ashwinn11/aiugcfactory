@@ -164,28 +164,16 @@ export async function generateRefinedImage(
   currentImageBase64: string,
   currentImageMimeType: string
 ): Promise<{ image: string; text?: string }> {
-  // IMPORTANT:
-  // Model thought parts/signatures are not safe to round-trip through JSON
-  // via the browser. Filter history to user turns only to avoid INVALID_ARGUMENT
-  // errors about missing thought_signature fields.
-  const safeHistory = (history || [])
-    .filter((turn) => turn?.role === "user" && Array.isArray(turn?.parts))
-    .map((turn) => ({
-      role: "user",
-      parts: (turn.parts as RawPart[]).filter((part) => part?.text || part?.inlineData),
-    }))
-    .filter((turn) => turn.parts.length > 0)
-    .slice(-6);
-
-  // Build full contents: safe prior user turns + new user message
+  // Keep refine single-turn against the latest image only.
+  // Replaying older image turns can cause the model to recompose camera framing.
+  void history;
   const contents = [
-    ...safeHistory,
     {
       role: "user",
       parts: [
         { inlineData: { mimeType: currentImageMimeType, data: currentImageBase64 } },
         {
-          text: `Edit this room image: ${message}. CRITICAL: Maintain the EXACT same camera position, viewing angle, perspective, and focal length — do not move, rotate, or zoom the virtual camera. Keep all walls, windows, doors, and room dimensions identical. CRITICAL: Keep the original room type and purpose (for example, bedroom stays bedroom) and do not convert it into another room category. Make only the requested design changes. Photorealistic result.`,
+          text: `Edit this exact room image: ${message}. NON-NEGOTIABLE: Keep the camera LOCKED to the exact same tripod position, viewing angle, perspective, horizon line, vanishing points, crop, and focal length. Do NOT recompose, zoom, rotate, tilt, pan, or change framing. Keep all walls, windows, doors, floor plan, and room dimensions pixel-aligned with the input. Keep the same room type and purpose (for example, bedroom stays bedroom). Change only the requested design elements and preserve everything else.`,
         },
       ],
     },

@@ -95,7 +95,7 @@ export default function BeforeAfter({ before, after }: BeforeAfterProps) {
             }`}
           >
             <div
-              className={`w-10 h-10 rounded-full border-2 flex items-center justify-center backdrop-blur-md transition-all duration-200 ${
+              className={`w-12 h-12 sm:w-10 sm:h-10 rounded-full border-2 flex items-center justify-center backdrop-blur-md transition-all duration-200 ${
                 isDragging
                   ? "border-terracotta bg-terracotta/20 shadow-[0_0_20px_rgba(196,101,58,0.3)]"
                   : "border-cream/60 bg-charcoal/40"
