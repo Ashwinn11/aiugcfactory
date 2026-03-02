@@ -33,9 +33,11 @@ export default function Home() {
   // User-only history passed to refine API.
   // Server sanitizes history and avoids replaying model thought parts.
   const conversationHistory = useRef<ConversationTurn[]>([]);
+  const styleRequestId = useRef(0);
 
   const handleImageSelected = useCallback(
     (base64: string, mimeType: string) => {
+      styleRequestId.current += 1;
       setOriginalImage(base64);
       setOriginalMimeType(mimeType);
       setRestyledImage("");
@@ -52,6 +54,7 @@ export default function Home() {
   const handleStyleSelected = useCallback(
     async (style: string, customPrompt?: string) => {
       if (!originalImage) return;
+      const requestId = ++styleRequestId.current;
       setIsGenerating(true);
       setError("");
       setRestyledImage("");
@@ -75,6 +78,7 @@ export default function Home() {
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Generation failed");
+        if (requestId !== styleRequestId.current) return;
         setRestyledImage(data.image);
 
         // Seed user-only history for future refine calls.
@@ -88,18 +92,42 @@ export default function Home() {
           },
         ];
 
-        if (data.suggestions) {
-          setSuggestions(data.suggestions);
-        }
         if (data.text) {
           setChatMessages([{ role: "assistant", text: data.text }]);
         }
+
+        // Fetch suggestions after the image is shown so restyle latency stays low.
+        void (async () => {
+          try {
+            const suggestionsRes = await fetch("/api/suggestions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                image: data.image,
+                mimeType: "image/png",
+                style,
+                customPrompt,
+              }),
+            });
+
+            if (!suggestionsRes.ok || requestId !== styleRequestId.current) return;
+            const suggestionsData = await suggestionsRes.json();
+            if (requestId === styleRequestId.current && suggestionsData.suggestions) {
+              setSuggestions(suggestionsData.suggestions);
+            }
+          } catch {
+            // Suggestions are optional; ignore failures.
+          }
+        })();
       } catch (err) {
+        if (requestId !== styleRequestId.current) return;
         setError(
           err instanceof Error ? err.message : "Something went wrong"
         );
       } finally {
-        setIsGenerating(false);
+        if (requestId === styleRequestId.current) {
+          setIsGenerating(false);
+        }
       }
     },
     [originalImage, originalMimeType]
@@ -243,13 +271,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Generating */}
-          {isGenerating && !restyledImage && (
-            <section className="border border-warm-gray/10 rounded-lg animate-fade-up">
-              <GeneratingOverlay />
-            </section>
-          )}
-
           {/* Step 3: Results */}
           {restyledImage && (
             <section className="animate-fade-up" style={{ animationDelay: "100ms" }}>
@@ -290,12 +311,6 @@ export default function Home() {
                 </div>
               )}
 
-              {isGenerating && (
-                <div className="mt-6 border border-warm-gray/10 rounded-lg">
-                  <GeneratingOverlay text="Refining your room" />
-                </div>
-              )}
-
               <div className="mt-8">
                 <ChatRefine
                   onSendMessage={handleRefine}
@@ -308,6 +323,13 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Loading modal */}
+      {isGenerating && (
+        <GeneratingOverlay
+          text={restyledImage ? "Refining your room" : "Restyling your room"}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-warm-gray/5 mt-20">

@@ -77,7 +77,7 @@ export default function ChatRefine({
           {messages.map((msg, i) => (
             <div
               key={i}
-              className={`text-sm px-4 py-2.5 max-w-[85%] animate-fade-up ${
+              className={`text-sm px-4 py-2.5 max-w-[85%] w-fit animate-fade-up ${
                 msg.role === "user"
                   ? "ml-auto bg-terracotta/15 text-cream border border-terracotta/20 rounded-2xl rounded-br-sm"
                   : "bg-charcoal-light text-warm-gray-light border border-warm-gray/10 rounded-2xl rounded-bl-sm"
@@ -88,7 +88,7 @@ export default function ChatRefine({
             </div>
           ))}
           {isLoading && (
-            <div className="bg-charcoal-light text-warm-gray border border-warm-gray/10 rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-[85%] text-sm">
+            <div className="bg-charcoal-light text-warm-gray border border-warm-gray/10 rounded-2xl rounded-bl-sm px-4 py-2.5 w-fit text-sm">
               <span className="inline-flex gap-1">
                 <span className="w-1.5 h-1.5 bg-warm-gray/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-warm-gray/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />

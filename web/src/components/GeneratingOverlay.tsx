@@ -2,7 +2,7 @@
 
 export default function GeneratingOverlay({ text }: { text?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 gap-6">
+    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-charcoal-light border border-warm-gray/10 rounded-2xl px-12 py-10 flex flex-col items-center gap-6 shadow-2xl">
       {/* Animated architectural lines */}
       <div className="relative w-20 h-20">
         <div
