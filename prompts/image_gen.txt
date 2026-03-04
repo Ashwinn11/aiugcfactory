@@ -72,7 +72,7 @@ The "Influencer Aesthetic" is defined by:
     "color_grading": "warm | cool | neutral | muted | vibrant"
   },
   "full_prompt_string": "The combined, comma-separated string optimized for realistic mobile generation. Must be 80-150 words. Must include: subject details, environment, lighting source, camera characteristics, skin/texture realism cues, and composition.",
-  "negative_prompt": "extra arms, extra hands, extra fingers, extra limbs, missing fingers, fused fingers, deformed hands, mutated body parts, anatomical errors, three arms, six fingers, blurry, low quality, distorted, watermark, cartoon, illustration, anime, 3d render, oversaturated, plastic skin, airbrushed, stock photo feel, professional camera, DSLR, bokeh balls, anamorphic, cinema lighting, studio lighting (unless studio style specified)"
+  "negative_prompt": "extra arms, three arms, extra hands, extra fingers, extra limbs, extra legs, three legs, extra feet, extra knees, missing fingers, fused fingers, fused limbs, deformed hands, deformed legs, mutated body parts, anatomical errors, six fingers, conjoined limbs, phantom limbs, blurry, low quality, distorted, watermark, cartoon, illustration, anime, 3d render, oversaturated, plastic skin, airbrushed, stock photo feel, professional camera, DSLR, bokeh balls, anamorphic, cinema lighting, studio lighting (unless studio style specified)"
 }
 </json_schema>
 

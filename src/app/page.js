@@ -18,18 +18,16 @@ const VIBES = [
 
 export default function Home() {
   // Avatar
-  const [avatar, setAvatar] = useState(null); // { base64, mimeType, url, name }
+  const [avatar, setAvatar] = useState(null);
   const [avatarLoading, setAvatarLoading] = useState(false);
   const fileInputRef = useRef(null);
 
   // Vibe input
   const [vibe, setVibe] = useState("");
 
-  // Flow states
-  const [planning, setPlanning] = useState(false);
-  const [scenes, setScenes] = useState(null); // array of scene objects
+  // Generation
   const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState(null); // { images: [{ image, prompt, scene }] }
+  const [result, setResult] = useState(null); // { images: [{ image, caption, timestamp }] }
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [error, setError] = useState(null);
 
@@ -71,45 +69,20 @@ export default function Home() {
     }
   }, []);
 
-  // ──── Step 1: Plan carousel scenes ────
-  const handlePlan = useCallback(async () => {
-    if (!vibe.trim() || planning) return;
-    setPlanning(true);
-    setError(null);
-    setScenes(null);
-    setResult(null);
-
-    try {
-      const res = await fetch("/api/plan-carousel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vibe: vibe.trim(), count: 5 }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to plan scenes");
-
-      setScenes(data.scenes);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setPlanning(false);
-    }
-  }, [vibe, planning]);
-
-  // ──── Step 2: Generate images from scenes ────
+  // ──── Generate carousel (single API call) ────
   const handleGenerate = useCallback(async () => {
-    if (!scenes || scenes.length === 0 || generating) return;
+    if (!vibe.trim() || generating) return;
     setGenerating(true);
     setError(null);
     setSelectedIdx(0);
+    setResult(null);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scenes,
+          vibe: vibe.trim(),
           avatar: avatar ? { base64: avatar.base64, mimeType: avatar.mimeType } : undefined,
           aspectRatio: "9:16",
         }),
@@ -126,12 +99,7 @@ export default function Home() {
     } finally {
       setGenerating(false);
     }
-  }, [scenes, avatar, generating, vibe]);
-
-  // ──── Remove a scene ────
-  const removeScene = useCallback((index) => {
-    setScenes((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  }, [vibe, avatar, generating]);
 
   // ──── Download single image ────
   const handleDownload = useCallback((imageData, index) => {
@@ -158,11 +126,7 @@ export default function Home() {
   const handleKeyDown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      if (scenes && !generating) {
-        handleGenerate();
-      } else if (!planning) {
-        handlePlan();
-      }
+      handleGenerate();
     }
   };
 
@@ -178,19 +142,14 @@ export default function Home() {
             UGC <span>Factory</span>
           </div>
         </div>
-        <nav className={styles.headerNav}>
-          <button className={styles.navBtn} onClick={() => setShowJson((s) => !s)}>
-            { } JSON
-          </button>
-        </nav>
       </header>
 
       {/* Hero */}
       <section className={styles.hero}>
         <h1 className={styles.heroTitle}>AI influencer content, in one click</h1>
         <p className={styles.heroSub}>
-          Upload your face, describe the vibe, get 5 post‑worthy carousel images — different poses,
-          accessories, candids.
+          Upload your face, describe the vibe, get 5 post‑worthy carousel images with captions —
+          all in a single shot.
         </p>
       </section>
 
@@ -262,7 +221,7 @@ export default function Home() {
             rows={3}
           />
           <div className={styles.vibeFooter}>
-            <span className={styles.vibeHint}>⌘↵ to plan scenes</span>
+            <span className={styles.vibeHint}>⌘↵ to generate</span>
           </div>
         </div>
         <div className={styles.vibeExamples}>
@@ -274,19 +233,17 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ STEP 3: Generate ═══ */}
-      <section className={styles.generateSection} style={{ animationDelay: "0.5s" }}>
+      {/* ═══ Generate Button ═══ */}
+      <section className={styles.generateSection}>
         <button
           className={styles.generateBtn}
-          onClick={() => { setScenes(null); handlePlan(); }}
-          disabled={!vibe.trim() || planning}
+          onClick={handleGenerate}
+          disabled={!vibe.trim() || generating}
         >
-          {planning ? (
-            <><span className={styles.spinner} /> Planning your carousel…</>
-          ) : scenes ? (
-            <>↻ Replan Carousel</>
+          {generating ? (
+            <><span className={styles.spinner} /> Generating your carousel…</>
           ) : (
-            <>✦ Plan My Carousel</>
+            <>✦ Generate Carousel</>
           )}
         </button>
       </section>
@@ -294,62 +251,13 @@ export default function Home() {
       {/* Error */}
       {error && <div className={styles.error}>⚠ {error}</div>}
 
-      {/* ═══ Scene Preview (between plan and generate) ═══ */}
-      {scenes && !result && !generating && (
-        <div className={styles.scenePreview}>
-          <div className={styles.scenePreviewHeader}>
-            <div className={styles.scenePreviewTitle}>
-              Planned scenes ({scenes.length})
-            </div>
-          </div>
-          <div className={styles.sceneList}>
-            {scenes.map((scene, i) => (
-              <div key={i} className={styles.sceneCard}>
-                <div className={styles.sceneIndex}>{i + 1}</div>
-                <div className={styles.sceneContent}>
-                  <div className={styles.sceneText}>
-                    {typeof scene === "string" ? scene : scene.scene || scene.description}
-                  </div>
-                  {scene.type && (
-                    <div className={styles.sceneType}>
-                      {scene.type} · {scene.framing || "—"}
-                    </div>
-                  )}
-                </div>
-                {scenes.length > 2 && (
-                  <button className={styles.sceneRemove} onClick={() => removeScene(i)}>
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className={styles.sceneActions}>
-            <button
-              className={styles.sceneGenerateBtn}
-              onClick={handleGenerate}
-              disabled={generating}
-            >
-              {generating ? (
-                <><span className={styles.spinner} /> Generating…</>
-              ) : (
-                <>✦ Generate {scenes.length} Images</>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Loading */}
       {generating && (
         <div className={styles.loadingResult}>
           <div className={styles.loadingLens} />
-          <div className={styles.loadingText}>
-            Generating {scenes?.length || 1} carousel images…
-          </div>
+          <div className={styles.loadingText}>Creating your photo dump…</div>
           <div className={styles.loadingSubtext}>
-            {avatar ? "Character-consistent " : ""}
-            scenes → prompts → images
+            {avatar ? "Character-consistent " : ""}5 images + captions in one shot
           </div>
         </div>
       )}
@@ -373,9 +281,7 @@ export default function Home() {
                 <div className={styles.carouselSlideInfo}>
                   <div className={styles.carouselSlideIndex}>#{i + 1}</div>
                   <div className={styles.carouselSlideScene}>
-                    {typeof item.scene === "string"
-                      ? item.scene
-                      : item.scene?.scene || item.scene?.description || "—"}
+                    {item.caption || "—"}
                   </div>
                 </div>
               </div>
@@ -390,11 +296,11 @@ export default function Home() {
                 src={result.images[selectedIdx].image}
                 alt={`Selected image ${selectedIdx + 1}`}
               />
-              <div className={styles.selectedScene}>
-                {typeof result.images[selectedIdx].scene === "string"
-                  ? result.images[selectedIdx].scene
-                  : result.images[selectedIdx].scene?.scene || "—"}
-              </div>
+              {result.images[selectedIdx].caption && (
+                <div className={styles.selectedScene}>
+                  {result.images[selectedIdx].caption}
+                </div>
+              )}
               <div className={styles.selectedActions}>
                 <button
                   className={styles.actionBtn}
@@ -402,39 +308,27 @@ export default function Home() {
                 >
                   ↓ Download
                 </button>
-
               </div>
             </div>
           )}
 
-          {/* Download all + JSON toggle */}
+          {/* Download all */}
           <div className={styles.downloadAllBar}>
             <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
               ↓ Download All {result.images.length} Images
             </button>
-            <button className={styles.jsonToggleBtn} onClick={() => setShowJson((s) => !s)}>
-              {showJson ? "Hide" : "📋"} JSON
-            </button>
           </div>
-
-          {showJson && result.images[selectedIdx]?.prompt && (
-            <div className={styles.jsonPanel}>
-              <div className={styles.jsonBody}>
-                <pre>{JSON.stringify(result.images[selectedIdx].prompt, null, 2)}</pre>
-              </div>
-            </div>
-          )}
         </section>
       )}
 
       {/* Empty State */}
-      {!result && !generating && !scenes && (
+      {!result && !generating && (
         <div className={styles.emptyState}>
           <div className={styles.emptyIcon}>📸</div>
           <div className={styles.emptyTitle}>Your carousel studio</div>
           <div className={styles.emptyDesc}>
-            Describe a vibe, and we'll plan 5 scenes for your photo dump — then generate all the
-            images with your avatar.
+            Describe a vibe and hit Generate — you'll get 5 post‑worthy images with captions, ready
+            for Instagram.
           </div>
         </div>
       )}

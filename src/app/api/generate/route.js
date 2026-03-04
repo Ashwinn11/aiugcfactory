@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const PROMPT_MODEL = "gemini-3.1-pro-preview";
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 
 function getSystemPrompt() {
@@ -13,80 +12,67 @@ function getSystemPrompt() {
       "utf-8"
     );
   } catch {
-    return "You are a photography prompt engineer. Output JSON with full_prompt_string, negative_prompt, meta_data, and prompt_components fields.";
+    return "";
   }
 }
 
-// Build the image prompt string from a structured JSON prompt
-function buildImagePrompt(promptJson) {
-  const imagePrompt =
-    promptJson.full_prompt_string ||
-    promptJson.prompt ||
-    JSON.stringify(promptJson.prompt_components);
+const CAROUSEL_SYSTEM = `You are an Instagram influencer creating a photo dump carousel. Given a vibe, generate 5 photos that look like real iPhone snapshots from your day — the kind you'd actually post.
 
-  const negativePrompt = promptJson.negative_prompt || "";
+Mix it up naturally: selfies, candid moments, what you're eating, your outfit, the view, your accessories. Not every photo needs to include you. Keep it authentic, casual, imperfect. Shot on iPhone, not a photoshoot.
 
-  return negativePrompt
-    ? `${imagePrompt}\n\nAvoid: ${negativePrompt}`
-    : imagePrompt;
-}
+Before each photo, write a casual Instagram caption (1 line with emoji).
 
-// Generate a single image, optionally with avatar reference for character consistency
-async function generateSingleImage(ai, imagePrompt, aspectRatio, avatar) {
-  let contents;
+Important: correct human anatomy only — 2 arms, 2 legs, no extras.`;
 
-  if (avatar) {
-    // Character consistency: pass avatar as reference, then the scene prompt
-    contents = [
-      {
-        inlineData: {
-          data: avatar.base64,
-          mimeType: avatar.mimeType || "image/png",
-        },
-      },
-      `This is a reference photo of the person. Generate a NEW photo of this SAME person (keep face, hair color, skin tone, and body type identical). The new photo should show:\n\n${imagePrompt}`,
-    ];
-  } else {
-    contents = imagePrompt;
-  }
+// Parse interleaved text + image parts from Gemini response
+function parseMultiImageResponse(response) {
+  const results = [];
+  let currentCaption = "";
 
-  const imageResponse = await ai.models.generateContent({
-    model: IMAGE_MODEL,
-    contents,
-    config: {
-      responseModalities: ["IMAGE"],
-      imageConfig: { aspectRatio },
-    },
-  });
+  if (!response.candidates?.[0]?.content?.parts) return results;
 
-  if (imageResponse.candidates?.[0]?.content?.parts) {
-    for (const part of imageResponse.candidates[0].content.parts) {
-      if (part.inlineData) {
-        const mimeType = part.inlineData.mimeType || "image/png";
-        return `data:${mimeType};base64,${part.inlineData.data}`;
+  for (const part of response.candidates[0].content.parts) {
+    // Skip thinking parts
+    if (part.thought) continue;
+
+    if (part.text) {
+      // Extract the last caption-like text before an image
+      const lines = part.text.trim().split("\n").filter(Boolean);
+      // Find the most relevant caption line
+      for (const line of lines) {
+        const cleaned = line
+          .replace(/^#+\s*/, "")
+          .replace(/^\*+\s*/, "")
+          .replace(/^Caption:\s*/i, "")
+          .replace(/^Image\s*\d+[:.]\s*/i, "")
+          .replace(/^Photo\s*\d+[:.]\s*/i, "")
+          .trim();
+        if (cleaned.length > 0) {
+          currentCaption = cleaned;
+        }
       }
+    } else if (part.inlineData) {
+      const mimeType = part.inlineData.mimeType || "image/png";
+      results.push({
+        image: `data:${mimeType};base64,${part.inlineData.data}`,
+        caption: currentCaption || "",
+        timestamp: Date.now() + results.length,
+      });
+      currentCaption = "";
     }
   }
-  return null;
+
+  return results;
 }
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const {
-      // Simple mode: just a brief
-      brief,
-      // Carousel mode: pre-planned scenes
-      scenes,
-      // Avatar for character consistency
-      avatar,
-      // Basic settings
-      aspectRatio = "9:16",
-    } = body;
+    const { vibe, avatar, aspectRatio = "9:16" } = body;
 
-    if (!brief && (!scenes || scenes.length === 0)) {
+    if (!vibe || vibe.trim().length === 0) {
       return NextResponse.json(
-        { error: "Please provide a brief or scenes" },
+        { error: "Please describe the vibe" },
         { status: 400 }
       );
     }
@@ -100,141 +86,95 @@ export async function POST(request) {
     }
 
     const ai = new GoogleGenAI({ apiKey });
+    const photoPrompt = getSystemPrompt();
 
-    if (scenes && scenes.length > 0) {
-      // ──── CAROUSEL MODE ────
-      // Each scene gets its own image prompt via the LLM, then its own image
-      const systemPrompt = getSystemPrompt();
+    // Build the prompt
+    const basePrompt = `Create a 5-photo Instagram photo dump carousel for this vibe:
 
-      // Generate image prompts for each scene in parallel
-      const promptPromises = scenes.map(async (scene) => {
-        const sceneDescription =
-          typeof scene === "string" ? scene : scene.scene || scene.description;
+"${vibe.trim()}"
 
-        const enhanceResponse = await ai.models.generateContent({
-          model: PROMPT_MODEL,
-          contents: sceneDescription,
-          config: {
-            systemInstruction: systemPrompt,
-            temperature: 0.7,
-            responseMimeType: "application/json",
+Generate 5 distinct photos. Before each photo, write a short casual Instagram caption with emoji. Make each photo a different type (selfie, food/accessory close-up, outfit detail, candid moment, the view). Shot on iPhone, UGC style.`;
+
+    const systemInstruction = `${CAROUSEL_SYSTEM}\n\nPhotography style reference:\n${photoPrompt}`;
+
+    // Try generation with retry on IMAGE_SAFETY
+    async function tryGenerate(prompt, attempt = 1) {
+      let contents;
+      if (avatar) {
+        contents = [
+          {
+            inlineData: {
+              data: avatar.base64,
+              mimeType: avatar.mimeType || "image/png",
+            },
           },
-        });
-
-        const rawText = enhanceResponse.text.trim();
-        try {
-          return JSON.parse(rawText);
-        } catch {
-          const cleaned = rawText
-            .replace(/^```(?:json)?\n?/i, "")
-            .replace(/\n?```$/i, "")
-            .trim();
-          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-          return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-        }
-      });
-
-      const promptResults = await Promise.allSettled(promptPromises);
-      const prompts = promptResults
-        .map((r) => (r.status === "fulfilled" ? r.value : null))
-        .filter(Boolean);
-
-      if (prompts.length === 0) {
-        return NextResponse.json(
-          { error: "Failed to generate scene prompts" },
-          { status: 500 }
-        );
+          `This is a reference photo of the person. ALL photos in the carousel must feature this SAME person (keep face, hair color, skin tone, body type identical). The person is wearing appropriate, stylish casual clothing in all photos.\n\n${prompt}`,
+        ];
+      } else {
+        contents = prompt;
       }
 
-      // Generate images for each scene prompt in parallel
-      const imagePromises = prompts.map((promptJson, i) => {
-        const imagePrompt = buildImagePrompt(promptJson);
-        return generateSingleImage(ai, imagePrompt, aspectRatio, avatar).then(
-          (image) => ({
-            image,
-            prompt: promptJson,
-            scene: scenes[i],
-            timestamp: Date.now() + i,
-          })
-        );
-      });
-
-      const imageResults = await Promise.allSettled(imagePromises);
-      const images = imageResults
-        .filter((r) => r.status === "fulfilled" && r.value.image)
-        .map((r) => r.value);
-
-      if (images.length === 0) {
-        return NextResponse.json(
-          { error: "No images were generated. Try a different vibe." },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        images,
-        mode: "carousel",
-      });
-    } else {
-      // ──── SINGLE MODE ────
-      const systemPrompt = getSystemPrompt();
-
-      const enhanceResponse = await ai.models.generateContent({
-        model: PROMPT_MODEL,
-        contents: brief,
+      const response = await ai.models.generateContent({
+        model: IMAGE_MODEL,
+        contents,
         config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.7,
-          responseMimeType: "application/json",
+          systemInstruction,
+          responseModalities: ["TEXT", "IMAGE"],
+          imageConfig: {
+            aspectRatio,
+          },
+          thinkingConfig: {
+            thinkingLevel: "High",
+          },
         },
       });
 
-      let promptJson;
-      const rawText = enhanceResponse.text.trim();
-      try {
-        promptJson = JSON.parse(rawText);
-      } catch {
-        const cleaned = rawText
-          .replace(/^```(?:json)?\n?/i, "")
-          .replace(/\n?```$/i, "")
-          .trim();
-        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-        if (!jsonMatch)
-          return NextResponse.json(
-            { error: "Failed to generate prompt" },
-            { status: 500 }
-          );
-        promptJson = JSON.parse(jsonMatch[0]);
+      const candidate = response.candidates?.[0];
+
+      // Check for safety block
+      if (!candidate || (candidate.finishReason && candidate.finishReason === "IMAGE_SAFETY")) {
+        if (attempt === 1) {
+          // Retry with safer framing
+          console.log("IMAGE_SAFETY triggered, retrying with safer prompt...");
+          const saferPrompt = prompt + "\n\nNote: all people are fully and appropriately dressed in stylish casual outfits. Focus on the environment, scenery, food, and lifestyle moments.";
+          return tryGenerate(saferPrompt, 2);
+        }
+        return { error: "This vibe triggered safety filters. Try describing the setting or activity differently." };
       }
 
-      const imagePrompt = buildImagePrompt(promptJson);
-      const image = await generateSingleImage(
-        ai,
-        imagePrompt,
-        aspectRatio,
-        avatar
-      );
-
-      if (!image) {
-        return NextResponse.json(
-          { error: "No image generated. Try a different prompt." },
-          { status: 500 }
-        );
+      if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
+        return { error: `Generation stopped (${candidate.finishReason}) — try a different vibe.` };
       }
 
-      return NextResponse.json({
-        images: [
-          {
-            image,
-            prompt: promptJson,
-            timestamp: Date.now(),
-          },
-        ],
-        mode: "single",
-      });
+      const images = parseMultiImageResponse(response);
+      if (images.length === 0) {
+        const partTypes = candidate.content?.parts?.map(p => p.text ? "text" : p.inlineData ? "image" : p.thought ? "thought" : "unknown") || [];
+        console.error("No images extracted. Parts received:", partTypes.join(", "));
+        return { error: "No images were generated. Try a different vibe." };
+      }
+
+      return { images };
     }
+
+    const result = await tryGenerate(basePrompt);
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      images: result.images,
+      vibe: vibe.trim(),
+    });
   } catch (err) {
-    console.error("Generation error:", err);
+    console.error("Generation error:", err.message);
+    // Check for specific API errors
+    if (err.message?.includes("SAFETY") || err.message?.includes("blocked")) {
+      return NextResponse.json(
+        { error: "This vibe was blocked by safety filters. Try rephrasing." },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       { error: err.message || "Generation failed" },
       { status: 500 }
