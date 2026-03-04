@@ -372,9 +372,9 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "Planning failed");
 
       setPlannedScenes(data.scenes);
-      // Auto-select first 5
+      // Auto-select all scenes
       const autoSelected = new Set();
-      data.scenes.slice(0, 5).forEach((_, i) => autoSelected.add(i));
+      data.scenes.forEach((_, i) => autoSelected.add(i));
       setSelectedSceneIds(autoSelected);
     } catch (e) {
       setError(e.message);
@@ -856,15 +856,15 @@ export default function Home() {
               <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
                 <div className={styles.stepLabel}>
                   <div className={styles.stepNumber}>4</div>
-                  <div className={styles.stepTitle}>Select & Edit Scenes</div>
+                  <div className={styles.stepTitle}>Review & Edit Scenes</div>
                 </div>
                 <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
-                  {plannedScenes.length} scenes planned. Select up to 5 to generate. ({selectedSceneIds.size}/5 selected)
+                  {plannedScenes.length} scenes ready. Deselect any you want to skip. ({selectedSceneIds.size}/{plannedScenes.length} selected)
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   {plannedScenes.map((scene, i) => {
                     const isSelected = selectedSceneIds.has(i);
-                    const isMaxed = selectedSceneIds.size >= 5 && !isSelected;
+                    const isMaxed = false;
                     const cameraColors = {
                       selfie: "#4ade80", mirror_selfie: "#60a5fa", backcamera: "#f59e0b",
                       pov: "#a78bfa", friend_candid: "#f472b6",
@@ -949,7 +949,7 @@ export default function Home() {
                   {generating ? (
                     <><span className={styles.spinner} /> Generating {selectedSceneIds.size} image{selectedSceneIds.size !== 1 ? "s" : ""}…</>
                   ) : (
-                    <>✦ Generate {selectedSceneIds.size} Selected Image{selectedSceneIds.size !== 1 ? "s" : ""}</>
+                    <>✦ Generate {selectedSceneIds.size} Image{selectedSceneIds.size !== 1 ? "s" : ""}</>
                   )}
                 </button>
               </section>
