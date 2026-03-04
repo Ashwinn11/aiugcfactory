@@ -866,7 +866,7 @@ export default function Home() {
                     const isSelected = selectedSceneIds.has(i);
                     const isMaxed = selectedSceneIds.size >= 5 && !isSelected;
                     const cameraColors = {
-                      selfie: "#4ade80", mirror_selfie: "#60a5fa", back_camera: "#f59e0b",
+                      selfie: "#4ade80", mirror_selfie: "#60a5fa", backcamera: "#f59e0b",
                       pov: "#a78bfa", friend_candid: "#f472b6",
                     };
                     return (

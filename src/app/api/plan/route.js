@@ -50,23 +50,31 @@ Mode: ${mode}
 
 Camera rules:
 - Allowed types: selfie, mirror_selfie, pov, backcamera.
-- Ad mode: selfie, mirror_selfie, or backcamera ONLY. Zero third-person/friend shots.
+- Ad mode: selfie, mirror_selfie, backcamera, or pov ONLY. Zero third-person/friend shots.
 
 ${isAd ? `NARRATIVE: Create a 10-part story. 
-- At least 5 shots MUST feature the product clearly. 
-- The other 5 shots should be LIFESTYLE/CONTEXT shots (e.g., this person's outfit, a shot of the bathroom vanity, this person looking in the mirror thinking, etc.) to build the story. 
+- At least 5 shots MUST feature the product/app clearly. 
+- The other 5 shots should be LIFESTYLE/CONTEXT shots related to the vibe (e.g., this person's outfit, their environment, or them thinking) to build the emotional story. 
 - The product does NOT need to be in every image.` : ""}
 
-Write extremely simple, situational prompts. 
+Write extremely simple, situational prompts that deeply reflect the "Vibe". 
 CRITICAL: The prompt MUST explicitly mention the camera action and anchor it to "this person".
-- Selfie: Front camera shot taken by "this person".
-- Mirror Selfie: Back camera shot in a mirror.
-- POV: Back camera shot from "this person's" eyes looking down at their hands or items.
-- Backcamera: Shot of "this person" (e.g., self-timer or phone propped up).
 - EVERY prompt must include the phrase "this person" (e.g., "this person's point of view looking down at their hands").
 
-${isAd ? `LOGICAL SETTING RULE: Ensure the environment matches a home-lifestyle story.
-- Skincare/Beauty: Bathroom, vanity, or bedroom. Avoid streets/cafes unless it's a "heading out" shot.` : ""}
+LOGIC RULES FOR CAMERA MODES:
+- POV (STRICT): If the shot focuses on a phone screen, a hand, a product, or items on a table, you MUST use 'pov' and set 'requires_avatar: false'.
+- BACKCAMERA (STRICT): Use ONLY for shots where "this person" is visible in the frame from a distance (tripod/self-timer style).
+- MIRROR SELFIE: Use for showing "this person" AND the phone/screen simultaneously in a reflection.
+- SELFIE: Use for "this person's" facial expressions and reactions.
+
+LOGICAL CONSISTENCY RULE:
+- Selfie: This person is using 1 hand to take the photo. They ONLY have 1 HAND FREE for props or gestures. They CANNOT be "taking a selfie" while uses both hands to hold a menu or touch their head.
+- Mirror Selfie: This person can show a phone screen to the mirror.
+- POV: This person is looking down at their hands. This is the BEST mode for showing a phone screen or product details.
+- DO NOT ask "this person" to do two conflicting hand-based actions (e.g., "taking a selfie while holding a large product with both hands"). Every selfie prompt MUST be physically possible with one arm extended.
+
+${isAd ? `LOGICAL SETTING RULE: Match the environment to the Vibe and Product.
+- Use logical settings: Kitchen for food, Bathroom for skincare, Street/Cafe for lifestyle, Home office for software, etc.` : ""}
 
 ❌ NEGATIVE RULE: DO NOT use any words from the "ABOUT YOU" section in the "prompt" field. DO NOT describe hair, skin, eyes, or ethnicity.
 ✅ POSITIVE RULE: Use ONLY "this person" or "the influencer".

@@ -35,7 +35,7 @@ export async function POST(request) {
         // Build contents array: [images...] + [text prompt]
         const contents = [];
 
-        if (avatar) {
+        if (avatar && scene.requires_avatar !== false) {
           contents.push({ inlineData: { data: avatar.base64, mimeType: avatar.mimeType || "image/png" } });
         }
 
@@ -46,9 +46,17 @@ export async function POST(request) {
         // Add a face avoidance rule for POV shots to prevent unwanted face renders
         const faceAvoidance = scene.requires_avatar === false ? " (DO NOT show this person's face, only their perspective/view)" : "";
 
-        // Enforce camera perspective by prepending it to the situational prompt
+        // Final prompt building
         const cameraPrefix = scene.camera ? `${scene.camera.replace(/_/g, " ")}: ` : "";
-        contents.push(`${cameraPrefix}${scene.prompt}${faceAvoidance}\n\n${photoPrompt}`);
+        let finalPrompt = `${cameraPrefix}${scene.prompt}${faceAvoidance}\n\n${photoPrompt}`;
+        
+        if (scene.camera === 'selfie') {
+          finalPrompt += "\nSELFIE CONSTRAINT: Must show this person's arm reaching out towards the side of the camera frame to anchor the perspective. One hand is occupied by the phone.";
+        }
+        if (scene.camera === 'mirror_selfie') {
+          finalPrompt += "\nCRITICAL: DO NOT show any camera UI, shutter buttons, mode labels, or phone interface elements. Just the person reflecting in the mirror.";
+        }
+        contents.push(finalPrompt);
 
         try {
           let candidate = null;
