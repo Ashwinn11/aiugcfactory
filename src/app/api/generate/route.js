@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+const TEXT_MODEL = "gemini-3.1-flash-image-preview"; // For product analysis (cheap, fast)
 
 function getSystemPrompt() {
   try {
@@ -17,56 +18,87 @@ function getSystemPrompt() {
 }
 
 // ──── Mode-specific system prompts ────
+// Each photo MUST specify WHO is holding the camera
 
 const MODE_PROMPTS = {
-  photodump: `You are an Instagram influencer creating a photo dump carousel. Given a vibe, generate 5 photos that look like real iPhone snapshots from DIFFERENT moments of your day — the kind you'd actually post as a photo dump.
+  photodump: `You are an Instagram influencer creating a photo dump carousel. Given a vibe, generate 5 photos that look like real iPhone snapshots from DIFFERENT moments — the kind you'd actually post as a photo dump.
 
-Mix it up naturally across different times and settings:
-- A selfie (mirror, front cam, or 0.5x angle)
-- A candid moment (laughing, walking, mid-action)
-- An accessory or food close-up (your bag, coffee, earrings, plate)
-- An outfit or detail shot (back camera, someone else took it)
-- The view or setting (landscape, restaurant interior, street)
+For EVERY photo, you MUST specify who is taking the photo and how. Choose from:
+- FRONT CAMERA SELFIE: person's arm visible in frame, slight wide-angle distortion from arm distance, phone held at arm's length
+- MIRROR SELFIE: full body visible in reflection, phone visible in hand in the mirror, bathroom/gym/elevator mirror
+- 0.5x ULTRAWIDE SELFIE: exaggerated wide-angle, arm very visible, group-friendly
+- FRIEND'S SHOT: taken by a friend — the person is looking at the camera, smiling or posing, natural eye contact (as if a real friend is holding the phone)
+- TIMER/TRIPOD SHOT: person posing at a distance, phone propped up against something
+- NO PERSON: close-up of an object only (food, drink, bag, shoes, view) — no person needed
 
-Each photo should feel like a DIFFERENT moment — different lighting, time of day, maybe even different outfits. This is a photo DUMP, not a photoshoot.
+Mix these naturally across the 5 photos. A real photo dump would have 2 selfies, 1 friend shot, and 2 object/view close-ups.
+
+Each photo should feel like a DIFFERENT moment — different lighting, time, maybe different outfits.
 
 Before each photo, write a casual 1-line Instagram caption with emoji.
 
-Important: correct human anatomy only — 2 arms, 2 legs, no extras.`,
+Important: correct human anatomy only — 2 arms, 2 legs, 5 fingers per hand, no extras.`,
 
-  carousel: `You are an Instagram influencer creating a post carousel from ONE specific occasion. Given a vibe, generate 5 photos that tell a cohesive visual story from a single event or moment — the kind you'd swipe through on someone's Instagram post.
+  carousel: `You are an Instagram influencer creating a post carousel from ONE specific occasion. Given a vibe, generate 5 photos that tell a cohesive visual story from a single event — the kind you'd swipe through on an Instagram post.
 
-All photos should feel like the SAME occasion:
-- Same overall lighting and time of day
-- Same outfit (if person is shown)
-- A natural flow: arriving → the scene → details → candid → the vibe
+All photos should feel like the SAME occasion (same outfit, same location, same time of day).
 
-Types of shots to include:
-- A establishing/wide shot of the place or scene
-- A posed or selfie shot at the location
-- A close-up detail (food, drink, decoration, texture)
-- A candid moment (laughing, looking away, mid-conversation)
-- A final moment (the view, sunset, leaving, a last look)
+For EVERY photo, you MUST specify who is taking it:
+- FRONT CAMERA SELFIE: arm visible, close to face, at the event
+- MIRROR SELFIE: getting ready before the event, full outfit visible
+- FRIEND'S SHOT: someone at the event took this — person is looking at camera with natural eye contact, aware they're being photographed
+- NO PERSON: close-up detail shot (the food, the cocktail, the view, the decor, a menu, the sunset)
+
+A natural carousel from one occasion would be: 1 mirror selfie (getting ready), 1 friend's shot at the place, 1 selfie at the spot, 2 detail/vibe close-ups (no person).
 
 Before each photo, write a short Instagram caption with emoji.
 
-Important: correct human anatomy only — 2 arms, 2 legs, no extras.`,
+Important: correct human anatomy only — 2 arms, 2 legs, 5 fingers per hand, no extras.`,
 
-  ad: `You are creating an influencer-style ad carousel featuring a PRODUCT. Given a vibe and a product image, generate 5 photos that look like organic influencer content promoting this product — NOT stock photos, NOT studio shots.
+  ad: `You are creating organic influencer-style content featuring a PRODUCT. This should look like a real influencer genuinely using and loving this product — NOT a corporate ad, NOT stock photos.
 
-The product must appear naturally in every image, but in different contexts:
-- Holding or using the product (close-up, hands visible)
-- Product in context (on a table, in a bag, on a shelf)
-- The person using/applying/wearing the product naturally
-- A flat-lay or aesthetic arrangement with the product
-- A lifestyle moment where the product fits in organically
+For EVERY photo, you MUST specify who is taking it:
+- FRONT CAMERA SELFIE: person holding or using the product, arm visible, casual selfie with the product
+- MIRROR SELFIE: person using the product in a mirror (applying serum, wearing accessory, outfit with product)
+- CLOSE-UP HANDS: tight shot of hands holding/using/opening the product — NO full body, just hands and product
+- FLAT LAY: overhead shot of product arranged with complementary items on a surface
+- NO PERSON: the product by itself in a lifestyle setting (on a bathroom shelf, kitchen counter, bedside table)
 
-Keep it authentic — this should look like a real influencer's actual sponsored post, not a corporate ad. Shot on iPhone, natural lighting, casual composition.
+A natural influencer product post would be: 1 selfie with product, 1 close-up of hands using it, 1 flat lay, 1 product in context (no person), 1 mirror/lifestyle shot.
 
-Before each photo, write a casual Instagram caption with emoji that subtly mentions the product.
+The product should appear in EVERY image but feel natural and organic — never staged, never commercial.
 
-Important: correct human anatomy only — 2 arms, 2 legs, no extras.`,
+Before each photo, write a casual Instagram caption with emoji that naturally mentions the product.
+
+Important: correct human anatomy only — 2 arms, 2 legs, 5 fingers per hand, no extras.`,
 };
+
+// ──── Product image analysis ────
+
+async function analyzeProductImage(ai, productImage) {
+  try {
+    const response = await ai.models.generateContent({
+      model: TEXT_MODEL,
+      contents: [
+        {
+          inlineData: {
+            data: productImage.base64,
+            mimeType: productImage.mimeType || "image/png",
+          },
+        },
+        "Analyze this product image. In 1-2 sentences, describe: what the product is (type, category), its color/appearance, any visible brand name or text on the packaging, and its approximate size. Be specific and factual.",
+      ],
+      config: {
+        responseModalities: ["TEXT"],
+      },
+    });
+
+    return response.text?.trim() || null;
+  } catch (err) {
+    console.error("Product analysis failed:", err.message);
+    return null;
+  }
+}
 
 // Parse interleaved text + image parts from Gemini response
 function parseMultiImageResponse(response) {
@@ -114,7 +146,7 @@ export async function POST(request) {
       vibe,
       mode = "photodump",
       avatar,
-      productImage, // { base64, mimeType } — for ad mode
+      productImage,
       aspectRatio = "9:16",
     } = body;
 
@@ -136,6 +168,12 @@ export async function POST(request) {
     const ai = new GoogleGenAI({ apiKey });
     const photoPrompt = getSystemPrompt();
 
+    // ──── Analyze product image if in ad mode ────
+    let productDescription = null;
+    if (mode === "ad" && productImage) {
+      productDescription = await analyzeProductImage(ai, productImage);
+    }
+
     // Select mode-specific system prompt
     const modeSystem = MODE_PROMPTS[mode] || MODE_PROMPTS.photodump;
     const systemInstruction = `${modeSystem}\n\nPhotography style reference:\n${photoPrompt}`;
@@ -143,11 +181,14 @@ export async function POST(request) {
     // Build the user prompt
     let basePrompt;
     if (mode === "ad") {
-      basePrompt = `Create a 5-photo influencer ad carousel for this product/vibe:
+      const productInfo = productDescription
+        ? `\n\nProduct details (from uploaded image): ${productDescription}`
+        : "";
+      basePrompt = `Create a 5-photo influencer carousel for this vibe:
 
-"${vibe.trim()}"
+"${vibe.trim()}"${productInfo}
 
-Generate 5 distinct photos showing the product in different lifestyle contexts. Before each photo, write a casual Instagram caption with emoji. Make it look like organic influencer content, not a corporate ad. Shot on iPhone, UGC style.`;
+Generate 5 distinct photos showing this product in organic, everyday use. Before each photo, write a casual Instagram caption with emoji. This should look like a real influencer's content, NOT a corporate ad.`;
     } else if (mode === "carousel") {
       basePrompt = `Create a 5-photo Instagram post carousel from this ONE occasion:
 
@@ -159,12 +200,11 @@ Generate 5 photos that tell the story of this moment — establishing shot, deta
 
 "${vibe.trim()}"
 
-Generate 5 distinct photos. Before each photo, write a short casual Instagram caption with emoji. Make each photo a different type (selfie, food/accessory close-up, outfit detail, candid moment, the view). Each should feel like a different moment. Shot on iPhone, UGC style.`;
+Generate 5 distinct photos from different moments. Before each photo, write a short casual Instagram caption with emoji. Each photo should feel like a different time/place. Shot on iPhone, UGC style.`;
     }
 
     // Try generation with retry on IMAGE_SAFETY
     async function tryGenerate(prompt, attempt = 1) {
-      // Build contents array with images
       let contents = [];
 
       if (avatar) {
@@ -185,19 +225,18 @@ Generate 5 distinct photos. Before each photo, write a short casual Instagram ca
         });
       }
 
-      // Build the text prompt with image references
+      // Build text prompt with image references
       let textPrompt = prompt;
       if (avatar && mode === "ad" && productImage) {
-        textPrompt = `The first image is a reference photo of the person — ALL photos must feature this SAME person (keep face, hair, skin tone, body identical). The second image is the PRODUCT to feature in every photo.\n\n${prompt}`;
+        textPrompt = `The first image is a reference of the PERSON — keep their face, hair, skin tone, body identical in every photo. The second image is the PRODUCT — feature this exact product in every photo.\n\n${prompt}`;
       } else if (avatar) {
-        textPrompt = `This is a reference photo of the person. ALL photos in the carousel must feature this SAME person (keep face, hair color, skin tone, body type identical). The person is wearing appropriate, stylish casual clothing in all photos.\n\n${prompt}`;
+        textPrompt = `This is a reference photo of the person. ALL photos must feature this SAME person (keep face, hair color, skin tone, body type identical). The person wears appropriate stylish casual clothing.\n\n${prompt}`;
       } else if (mode === "ad" && productImage) {
-        textPrompt = `This is the PRODUCT to feature in every photo of the carousel. Show it in different lifestyle contexts.\n\n${prompt}`;
+        textPrompt = `This is the PRODUCT to feature in every photo of the carousel. Show this exact product in different lifestyle contexts.\n\n${prompt}`;
       }
 
       contents.push(textPrompt);
 
-      // If no images provided, just use the text prompt
       if (!avatar && !(mode === "ad" && productImage)) {
         contents = prompt;
       }
