@@ -16,7 +16,7 @@ CRITICAL: Aggressively avoid "glossy," "oily," "shiny," "glass skin," or "glazed
 </principle>
 
 <principle name="Negative Constraints">
-Ensure all generations aggressively avoid these traits: "professional camera, DSLR, bokeh balls, anamorphic, cinema lighting, studio lighting, extra limbs, mutated anatomy, airbrushed, plastic skin, 3d render, cartoon".
+Ensure all generations aggressively avoid these traits: "professional camera, DSLR, bokeh balls, anamorphic, cinema lighting, studio lighting, extra limbs, mutated anatomy, airbrushed, plastic skin, 3d render, cartoon, camera UI, shutter button, phone interface, screenshot, menu buttons, battery icons".
 </principle>
 </cognitive_framework>
 <visual_analysis_reference>

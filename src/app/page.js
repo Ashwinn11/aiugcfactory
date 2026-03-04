@@ -515,6 +515,8 @@ export default function Home() {
       aspectRatio: result.aspectRatio || "9:16",
       images: result.images.map(img => ({
         image: img.image,
+        caption: img.caption,
+        scene_prompt: img.scene_prompt,
         overlays: []
       })),
       savedAt: Date.now()
@@ -608,7 +610,29 @@ export default function Home() {
               className={view === "editor" ? styles.tabActive : styles.tab}
               onClick={() => {
                 if (packs.length > 0) {
-                  setEditingPack(packs[0]);
+                  let packToEdit = packs[0];
+                  // Magic: Auto-add captions as overlays if empty
+                  const hasNoOverlays = packToEdit.images.every(img => (img.overlays || []).length === 0);
+                  if (hasNoOverlays) {
+                    packToEdit = {
+                      ...packToEdit,
+                      images: packToEdit.images.map(img => ({
+                        ...img,
+                        overlays: img.caption ? [{
+                          id: `auto_${Date.now()}_${Math.random()}`,
+                          text: img.caption,
+                          x: 50,
+                          y: 80,
+                          fontSize: 24,
+                          color: "#ffffff",
+                          bgMode: "solid",
+                          rotation: 0,
+                          size: 30
+                        }] : []
+                      }))
+                    };
+                  }
+                  setEditingPack(packToEdit);
                   requestViewChange("editor");
                 } else {
                   // Create blank pack
@@ -661,35 +685,15 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ═══ ORIENTATION SELECTOR ═══ */}
-          <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
-            <div className={styles.stepLabel}>
-              <div className={styles.stepNumber}>2</div>
-              <div className={styles.stepTitle}>Choose orientation</div>
-            </div>
-            <div className={styles.ratioOptions}>
-              {[
-                { id: "9:16", label: "9:16 (Full Vertical)", sub: "TikTok / Reels", w: 14, h: 24 },
-                { id: "3:4", label: "3:4 (Portrait)", sub: "TikTok / Insta Feed", w: 18, h: 24 },
-              ].map(r => (
-                <button 
-                  key={r.id}
-                  className={genAspectRatio === r.id ? styles.ratioCardActive : styles.ratioCard}
-                  onClick={() => setGenAspectRatio(r.id)}
-                >
-                  <div className={styles.ratioIcon} style={{ width: r.w, height: r.h }} />
-                  <div className={styles.ratioLabel}>{r.label}</div>
-                  <div className={styles.ratioSub}>{r.sub}</div>
-                </button>
-              ))}
-            </div>
-          </section>
 
-          {/* ═══ STEP 3: UPLOADS ═══ */}
+          {/* ═══ STEP 2: UPLOADS ═══ */}
           <section className={styles.stepSection} style={{ animationDelay: "0.2s" }}>
             <div className={styles.stepLabel}>
-              <div className={styles.stepNumber}>3</div>
-              <div className={styles.stepTitle}>Character & Products</div>
+              <div className={styles.stepNumber}>2</div>
+              <div className={styles.stepTitle}>
+                {mode === "ad" ? "Your face + product" : "Your avatar"}
+                <span className={styles.stepOptional}> (optional)</span>
+              </div>
             </div>
             <div className={styles.uploadRow}>
               {/* Avatar */}
@@ -785,7 +789,7 @@ export default function Home() {
             <>
               <section className={styles.stepSection} style={{ animationDelay: "0.4s" }}>
                 <div className={styles.stepLabel}>
-                  <div className={styles.stepNumber}>4</div>
+                  <div className={styles.stepNumber}>3</div>
                   <div className={styles.stepTitle}>{currentMode?.vibeLabel || "Describe the vibe"}</div>
                 </div>
                 {currentMode?.vibeHint && (
@@ -851,7 +855,7 @@ export default function Home() {
             <>
               <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
                 <div className={styles.stepLabel}>
-                  <div className={styles.stepNumber}>5</div>
+                  <div className={styles.stepNumber}>4</div>
                   <div className={styles.stepTitle}>Select & Edit Scenes</div>
                 </div>
                 <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
@@ -1100,7 +1104,29 @@ export default function Home() {
                   </div>
                   <div className={styles.savedCardActions}>
                     <button className={styles.savedActionBtn} onClick={() => {
-                      setEditingPack(pack);
+                      let packToEdit = pack;
+                      // Magic: Auto-add captions as overlays if empty
+                      const hasNoOverlays = packToEdit.images.every(img => (img.overlays || []).length === 0);
+                      if (hasNoOverlays) {
+                        packToEdit = {
+                          ...packToEdit,
+                          images: packToEdit.images.map(img => ({
+                            ...img,
+                            overlays: img.caption ? [{
+                              id: `auto_${Date.now()}_${Math.random()}`,
+                              text: img.caption,
+                              x: 50,
+                              y: 80,
+                              fontSize: 24,
+                              color: "#ffffff",
+                              bgMode: "solid",
+                              rotation: 0,
+                              size: 30
+                            }] : []
+                          }))
+                        };
+                      }
+                      setEditingPack(packToEdit);
                       setEditorIdx(0);
                       setView("editor");
                     }}>✎</button>
