@@ -40,57 +40,46 @@ async function analyzeProduct(ai, productImage) {
 function buildPrompt(vibe, mode, personDescription, productDescription) {
   const isAd = mode === "ad";
 
-  return `You are an Instagram influencer planning a high-converting 10-part story or carousel.
+  return `You are a content creator planning a high-converting 10-part social media story or carousel.
 
 ${personDescription ? `ABOUT YOU:\n${personDescription}` : ""}
-${isAd && productDescription ? `\nPRODUCT:\n${productDescription}` : ""}
+${(isAd || productDescription) ? `\nPRODUCT/CORE ITEM:\n${productDescription || "Feature the item mentioned in the vibe."}` : ""}
 
 Vibe: "${vibe}"
 Mode: ${mode}
 
-Camera rules:
-- Allowed types: selfie, mirror_selfie, pov, backcamera.
-- Ad mode: selfie, mirror_selfie, backcamera, or pov ONLY. Zero third-person/friend shots.
+THE ONE CREATOR PRINCIPLE:
+- You are filming EVERYTHING yourself with ONE iPhone and TWO hands. 
+- A "Selfie" uses one hand for the phone (one hand free).
+- A "POV" is from your eyes looking down at your hands/items.
+- A "Backcamera" is you standing in front of a propped-up phone (both hands free).
+- A "Mirror Selfie" is you seeing yourself + the setup in a reflection.
+- NO third-person or "taken by a friend" shots.
 
-${isAd ? `NARRATIVE: Create a 10-part story. 
-- At least 5 shots MUST feature the product/app clearly. 
-- The other 5 shots should be LIFESTYLE/CONTEXT shots related to the vibe (e.g., this person's outfit, their environment, or them thinking) to build the emotional story. 
-- The product does NOT need to be in every image.` : ""}
+CAMERA CONSTRAINTS:
+- Use only: selfie, mirror_selfie, pov, backcamera.
+- If focusing on a screen, hand, or product detail: MUST use 'pov' and 'requires_avatar: false'.
+- If showing a reaction or face: MUST use 'selfie' or 'mirror_selfie'.
 
-Write extremely simple, situational prompts that deeply reflect the "Vibe". 
-CRITICAL: The prompt MUST explicitly mention the camera action and anchor it to "this person".
-- EVERY prompt must include the phrase "this person" (e.g., "this person's point of view looking down at their hands").
+${isAd ? `AD NARRATIVE: Create a 10-part story focused on Conversion.
+- Use a "Before / After" or "Problem / Solution" flow.
+- Ensure the product/results are clearly visible in at least 5 shots.
+- Focus on "Application" and "Honest Review" vibes.` : `LIFESTYLE NARRATIVE: Create a 10-part cohesive story focused on Mood.
+- Focus on variety and "Authentic Moments".
+- Ensure the shots flow logically through the environment.`}
 
-LOGIC RULES FOR CAMERA MODES:
-- POV (STRICT): If the shot focuses on a phone screen, a hand, a product, or items on a table, you MUST use 'pov' and set 'requires_avatar: false'.
-- BACKCAMERA (STRICT): Use ONLY for shots where "this person" is visible in the frame from a distance (tripod/self-timer style).
-- MIRROR SELFIE: Use for showing "this person" AND the phone/screen simultaneously in a reflection.
-- SELFIE: Use for "this person's" facial expressions and reactions.
-
-LOGICAL CONSISTENCY RULE:
-- Selfie: This person is using 1 hand to take the photo. They ONLY have 1 HAND FREE for props or gestures. They CANNOT be "taking a selfie" while uses both hands to hold a menu or touch their head.
-- Mirror Selfie: This person can show a phone screen to the mirror.
-- POV: This person is looking down at their hands. This is the BEST mode for showing a phone screen or product details.
-- DO NOT ask "this person" to do two conflicting hand-based actions (e.g., "taking a selfie while holding a large product with both hands"). Every selfie prompt MUST be physically possible with one arm extended.
-
-${isAd ? `LOGICAL SETTING RULE: Match the environment to the Vibe and Product.
-- Use logical settings: Kitchen for food, Bathroom for skincare, Street/Cafe for lifestyle, Home office for software, etc.` : ""}
+LOGICAL SETTINGS: 
+- Match the environment to the Vibe (e.g., Kitchen for food, Bathroom for skincare, Outdoor for city, etc.).
 
 ❌ NEGATIVE RULE: DO NOT use any words from the "ABOUT YOU" section in the "prompt" field. DO NOT describe hair, skin, eyes, or ethnicity.
 ✅ POSITIVE RULE: Use ONLY "this person" or "the influencer".
-
-EXAMPLES:
-- BAD: "this person, a fair-skinned woman with brown hair, taking a selfie"
-- GOOD: "this person taking a selfie"
-
-${isAd ? "Every scene must include the person's physical presence (e.g., hand or arm visible). Focus on a compelling 'Before vs After' and 'Application' narrative." : ""}
 
 Output a JSON array of exactly 10 objects:
 - "prompt": A minimal situational instruction (e.g., "this person taking a mirror selfie").
 - "caption": 1-line Instagram caption with emoji.
 - "camera": One of "selfie", "mirror_selfie", "backcamera", "pov".
 - "requires_avatar": true if face is visible, false if POV/hands-only.
-- "requires_product": true if the product should be featured in this shot, false if it's a lifestyle/context shot.`;
+- "requires_product": true if the product should be featured in this shot.`;
 }
 
 export async function POST(request) {

@@ -48,14 +48,7 @@ export async function POST(request) {
 
         // Final prompt building
         const cameraPrefix = scene.camera ? `${scene.camera.replace(/_/g, " ")}: ` : "";
-        let finalPrompt = `${cameraPrefix}${scene.prompt}${faceAvoidance}\n\n${photoPrompt}`;
-        
-        if (scene.camera === 'selfie') {
-          finalPrompt += "\nSELFIE CONSTRAINT: Must show this person's arm reaching out towards the side of the camera frame to anchor the perspective. One hand is occupied by the phone.";
-        }
-        if (scene.camera === 'mirror_selfie') {
-          finalPrompt += "\nCRITICAL: DO NOT show any camera UI, shutter buttons, mode labels, or phone interface elements. Just the person reflecting in the mirror.";
-        }
+        const finalPrompt = `${cameraPrefix}${scene.prompt}${faceAvoidance}\n\n${photoPrompt}`;
         contents.push(finalPrompt);
 
         try {
