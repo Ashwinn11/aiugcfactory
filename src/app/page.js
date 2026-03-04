@@ -38,12 +38,14 @@ const MODES = [
     label: "Ad Creative",
     icon: "📦",
     desc: "You + a product — organic influencer-style content",
-    placeholder: "This changed my morning routine — upload the product above...",
+    vibeLabel: "The marketing angle",
+    vibeHint: "Describe the hook or the problem this product solves",
+    placeholder: "This changed my morning routine — honest review about the texture...",
     vibes: [
-      "My new obsession — unboxing, first try, daily use",
-      "Get ready with me featuring this product",
-      "A day in my life with this in my bag",
-      "Honest review — the texture, the packaging, the results",
+      "Direct hook — why this is better than what you're using",
+      "Soft sell — how this fits into a busy morning routine",
+      "Problem/Solution — the one thing that fixed my skin texture",
+      "The unboxing — first impressions of the packaging and feel",
     ],
   },
 ];
@@ -67,6 +69,9 @@ export default function Home() {
   const exportRef = useRef(null);
   const [exportingPost, setExportingPost] = useState(null);
 
+  // Orientation
+  const [genAspectRatio, setGenAspectRatio] = useState("9:16");
+
   // Vibe input
   const [vibe, setVibe] = useState("");
 
@@ -81,8 +86,8 @@ export default function Home() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [error, setError] = useState(null);
 
-  // History
-  const [history, setHistory] = useState([]);
+  // History (Generative results)
+  const [resultHistory, setResultHistory] = useState([]);
 
   // Packs (formerly savedPosts)
   const [packs, setPacks] = useState([]);
@@ -91,6 +96,107 @@ export default function Home() {
   const [editorIdx, setEditorIdx] = useState(0); 
   const [exportQueue, setExportQueue] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Undo/Redo (Editor specific)
+  const [editorHistory, setEditorHistory] = useState([]);
+  const [editorHistoryIdx, setEditorHistoryIdx] = useState(-1);
+
+  // Unsaved changes confirmation
+  const [confirmModal, setConfirmModal] = useState({ 
+    show: false, 
+    type: null, // "view", "mode", "fresh"
+    next: null 
+  });
+
+  const hasUnsavedChanges = useCallback(() => {
+    if (view === "editor") return editorHistoryIdx > 0;
+    if (view === "generator") return !!result || !!plannedScenes || vibe.trim().length > 0;
+    return false;
+  }, [view, editorHistoryIdx, result, plannedScenes, vibe]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges()) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleStartFresh = useCallback(() => {
+    setVibe("");
+    setPlannedScenes(null);
+    setResult(null);
+    setSelectedSceneIds(new Set());
+    setProductImage(null);
+    setError(null);
+  }, []);
+
+  const requestViewChange = (nextView) => {
+    if (nextView === view) return;
+    if (hasUnsavedChanges()) {
+      setConfirmModal({ show: true, type: "view", next: nextView });
+    } else {
+      setView(nextView);
+    }
+  };
+
+  const requestModeChange = (nextMode) => {
+    if (nextMode === mode) return;
+    if (hasUnsavedChanges()) {
+      setConfirmModal({ show: true, type: "mode", next: nextMode });
+    } else {
+      setMode(nextMode);
+      handleStartFresh();
+    }
+  };
+
+  const requestFreshStart = () => {
+    if (hasUnsavedChanges()) {
+      setConfirmModal({ show: true, type: "fresh", next: null });
+    } else {
+      handleStartFresh();
+    }
+  };
+
+  useEffect(() => {
+    if (view === "editor" && editingPack && editorHistory.length === 0) {
+      setEditorHistory([JSON.parse(JSON.stringify(editingPack))]);
+      setEditorHistoryIdx(0);
+    } else if (view !== "editor") {
+      setEditorHistory([]);
+      setEditorHistoryIdx(-1);
+    }
+  }, [view, editingPack]);
+
+  const commitToHistory = useCallback((newPack) => {
+    setEditorHistory(prev => {
+      const next = prev.slice(0, editorHistoryIdx + 1);
+      next.push(JSON.parse(JSON.stringify(newPack)));
+      const final = next.slice(-50);
+      setEditorHistoryIdx(final.length - 1);
+      return final;
+    });
+    setEditingPack(newPack);
+  }, [editorHistoryIdx]);
+
+  const handleUndo = useCallback(() => {
+    if (editorHistoryIdx > 0) {
+      const prevIdx = editorHistoryIdx - 1;
+      setEditorHistoryIdx(prevIdx);
+      setEditingPack(JSON.parse(JSON.stringify(editorHistory[prevIdx])));
+    }
+  }, [editorHistory, editorHistoryIdx]);
+
+  const handleRedo = useCallback(() => {
+    if (editorHistoryIdx < editorHistory.length - 1) {
+      const nextIdx = editorHistoryIdx + 1;
+      setEditorHistoryIdx(nextIdx);
+      setEditingPack(JSON.parse(JSON.stringify(editorHistory[nextIdx])));
+    }
+  }, [editorHistory, editorHistoryIdx]);
 
   // ──── Persistence (IndexedDB for Large Image Data) ────
   const [dbReady, setDbReady] = useState(false);
@@ -323,16 +429,16 @@ export default function Home() {
             mode === "ad" && productImage
               ? { base64: productImage.base64, mimeType: productImage.mimeType }
               : undefined,
-          aspectRatio: "9:16",
+          aspectRatio: genAspectRatio,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed");
 
-      const newResult = { images: data.images, timestamp: Date.now(), vibe, mode };
+      const newResult = { images: data.images, timestamp: Date.now(), vibe, mode, aspectRatio: genAspectRatio };
       setResult(newResult);
-      setHistory((prev) => [newResult, ...prev].slice(0, 20));
+      setResultHistory((prev) => [newResult, ...prev].slice(0, 20));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -364,7 +470,7 @@ export default function Home() {
 
   const handleExportPack = useCallback((pack) => {
     if (!pack?.images) return;
-    setExportQueue([...pack.images]);
+    setExportQueue(pack.images.map(img => ({ ...img, aspectRatio: pack.aspectRatio })));
   }, []);
 
   useEffect(() => {
@@ -406,7 +512,7 @@ export default function Home() {
       id: `pack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title: `${result.mode || 'Post'} - ${result.vibe || 'Untitled'}`,
       type: result.mode,
-      aspectRatio: "9:16",
+      aspectRatio: result.aspectRatio || "9:16",
       images: result.images.map(img => ({
         image: img.image,
         overlays: []
@@ -456,10 +562,20 @@ export default function Home() {
 
   // ──── Keyboard shortcut ────
   const handleKeyDown = (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      if (plannedScenes) handleGenerate();
-      else handlePlan();
+    if ((e.metaKey || e.ctrlKey)) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (plannedScenes) handleGenerate();
+        else handlePlan();
+      }
+      if (e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo(); else handleUndo();
+      }
+      if (e.key === "y") {
+        e.preventDefault();
+        handleRedo();
+      }
     }
   };
 
@@ -475,42 +591,42 @@ export default function Home() {
             UGC <span>Factory</span>
           </div>
         </div>
-        <nav className={styles.nav}>
-          <button 
-            className={view === "generator" ? styles.navItemActive : styles.navItem}
-            onClick={() => setView("generator")}
-          >
-            Generator
-          </button>
-          <button 
-            className={view === "library" ? styles.navItemActive : styles.navItem}
-            onClick={() => setView("library")}
-          >
-            Library
-          </button>
-          <button 
-            className={view === "editor" ? styles.navItemActive : styles.navItem}
-            onClick={() => {
-              if (packs.length > 0) {
-                setEditingPack(packs[0]);
-                setView("editor");
-              } else {
-                // Create blank pack
-                const newPack = {
-                  id: `pack_${Date.now()}`,
-                  title: "New Project",
-                  images: [],
-                  aspectRatio: "9:16",
-                  savedAt: Date.now()
-                };
-                setEditingPack(newPack);
-                setView("editor");
-              }
-            }}
-          >
-            Editor
-          </button>
-        </nav>
+          <div className={styles.tabs}>
+            <button 
+              className={view === "generator" ? styles.tabActive : styles.tab}
+              onClick={() => requestViewChange("generator")}
+            >
+              Generator
+            </button>
+            <button 
+              className={view === "library" ? styles.tabActive : styles.tab}
+              onClick={() => requestViewChange("library")}
+            >
+              Library
+            </button>
+            <button 
+              className={view === "editor" ? styles.tabActive : styles.tab}
+              onClick={() => {
+                if (packs.length > 0) {
+                  setEditingPack(packs[0]);
+                  requestViewChange("editor");
+                } else {
+                  // Create blank pack
+                  const newPack = {
+                    id: `pack_${Date.now()}`,
+                    title: "New Project",
+                    images: [],
+                    aspectRatio: genAspectRatio,
+                    savedAt: Date.now()
+                  };
+                  setEditingPack(newPack);
+                  requestViewChange("editor");
+                }
+              }}
+            >
+              Editor
+            </button>
+          </div>
       </header>
 
       {/* ═══ GENERATOR VIEW ═══ */}
@@ -535,10 +651,7 @@ export default function Home() {
                 <button
                   key={m.id}
                   className={mode === m.id ? styles.modeCardActive : styles.modeCard}
-                  onClick={() => {
-                    setMode(m.id);
-                    setVibe("");
-                  }}
+                  onClick={() => requestModeChange(m.id)}
                 >
                   <div className={styles.modeIcon}>{m.icon}</div>
                   <div className={styles.modeLabel}>{m.label}</div>
@@ -548,14 +661,35 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ═══ AVATAR + PRODUCT ═══ */}
-          <section className={styles.stepSection} style={{ animationDelay: "0.2s" }}>
+          {/* ═══ ORIENTATION SELECTOR ═══ */}
+          <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
             <div className={styles.stepLabel}>
               <div className={styles.stepNumber}>2</div>
-              <div className={styles.stepTitle}>
-                {mode === "ad" ? "Your face + product" : "Your avatar"}
-                <span className={styles.stepOptional}> (optional)</span>
-              </div>
+              <div className={styles.stepTitle}>Choose orientation</div>
+            </div>
+            <div className={styles.ratioOptions}>
+              {[
+                { id: "9:16", label: "9:16 (Full Vertical)", sub: "TikTok / Reels", w: 14, h: 24 },
+                { id: "3:4", label: "3:4 (Portrait)", sub: "TikTok / Insta Feed", w: 18, h: 24 },
+              ].map(r => (
+                <button 
+                  key={r.id}
+                  className={genAspectRatio === r.id ? styles.ratioCardActive : styles.ratioCard}
+                  onClick={() => setGenAspectRatio(r.id)}
+                >
+                  <div className={styles.ratioIcon} style={{ width: r.w, height: r.h }} />
+                  <div className={styles.ratioLabel}>{r.label}</div>
+                  <div className={styles.ratioSub}>{r.sub}</div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* ═══ STEP 3: UPLOADS ═══ */}
+          <section className={styles.stepSection} style={{ animationDelay: "0.2s" }}>
+            <div className={styles.stepLabel}>
+              <div className={styles.stepNumber}>3</div>
+              <div className={styles.stepTitle}>Character & Products</div>
             </div>
             <div className={styles.uploadRow}>
               {/* Avatar */}
@@ -651,9 +785,14 @@ export default function Home() {
             <>
               <section className={styles.stepSection} style={{ animationDelay: "0.4s" }}>
                 <div className={styles.stepLabel}>
-                  <div className={styles.stepNumber}>3</div>
-                  <div className={styles.stepTitle}>Describe the vibe</div>
+                  <div className={styles.stepNumber}>4</div>
+                  <div className={styles.stepTitle}>{currentMode?.vibeLabel || "Describe the vibe"}</div>
                 </div>
+                {currentMode?.vibeHint && (
+                  <p style={{ margin: "0 0 1rem 3.5rem", color: "#888", fontSize: "0.85rem" }}>
+                    {currentMode.vibeHint}
+                  </p>
+                )}
                 <div className={styles.vibeBox}>
                   <textarea
                     className={styles.vibeTextarea}
@@ -712,7 +851,7 @@ export default function Home() {
             <>
               <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
                 <div className={styles.stepLabel}>
-                  <div className={styles.stepNumber}>4</div>
+                  <div className={styles.stepNumber}>5</div>
                   <div className={styles.stepTitle}>Select & Edit Scenes</div>
                 </div>
                 <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
@@ -862,14 +1001,7 @@ export default function Home() {
                     >
                       ↓ Download
                     </button>
-                    <button
-                      className={styles.actionBtnSuccess}
-                      onClick={() => {
-                        handleSave(result);
-                      }}
-                    >
-                      {packs.some(p => p.images.some(img => img.image === result.images[0].image)) ? "♥ Saved!" : "♥ Save to Library"}
-                    </button>
+
                   </div>
                 </div>
               )}
@@ -877,6 +1009,21 @@ export default function Home() {
               <div className={styles.downloadAllBar}>
                 <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
                   ↓ Download All {result.images.length} Images
+                </button>
+              </div>
+
+              <div className={styles.genActions}>
+                {packs.some(p => p.images.length > 0 && p.images[0].image === result.images[0].image) ? (
+                  <button className={styles.saveLibraryBtn} disabled style={{ opacity: 0.6, cursor: 'default' }}>
+                    ♥ Saved
+                  </button>
+                ) : (
+                  <button className={styles.saveLibraryBtn} onClick={() => handleSave(result)}>
+                    ♥ Save to Library
+                  </button>
+                )}
+                <button className={styles.newGenBtn} onClick={requestFreshStart}>
+                  ↻ Start Fresh
                 </button>
               </div>
             </section>
@@ -897,7 +1044,7 @@ export default function Home() {
                 id: `pack_${Date.now()}`,
                 title: "New Project",
                 images: [],
-                aspectRatio: "9:16",
+                aspectRatio: genAspectRatio,
                 savedAt: Date.now()
               };
               setEditingPack(newPack);
@@ -921,7 +1068,7 @@ export default function Home() {
                   <div className={styles.savedImageWrapper}>
                     <div style={{ 
                       width: '540px', 
-                      height: pack.aspectRatio === '1:1' ? '540px' : '960px', 
+                      height: pack.aspectRatio === '1:1' ? '540px' : pack.aspectRatio === '3:4' ? '720px' : '960px', 
                       transform: 'scale(0.4)', 
                       transformOrigin: 'top left' 
                     }}>
@@ -975,22 +1122,36 @@ export default function Home() {
         <section className={styles.editorView}>
           <div className={styles.editorHeader}>
             <div className={styles.editorHeaderLeft}>
-              <button className={styles.editorBackBtn} onClick={() => setView("library")}>← Back</button>
+              <button className={styles.editorBackBtn} onClick={() => requestViewChange("library")}>← Back</button>
               <div className={styles.editorTitle}>{editingPack.title}</div>
+              <div className={styles.editorHistoryCtrls}>
+                <button 
+                  className={styles.historyBtn} 
+                  onClick={handleUndo} 
+                  disabled={editorHistoryIdx <= 0}
+                  title="Undo (⌘Z)"
+                >⟲</button>
+                <button 
+                  className={styles.historyBtn} 
+                  onClick={handleRedo} 
+                  disabled={editorHistoryIdx >= editorHistory.length - 1}
+                  title="Redo (⌘⇧Z)"
+                >⟳</button>
+              </div>
             </div>
             <div className={styles.editorControls}>
               <select 
                 value={editingPack.aspectRatio} 
-                onChange={(e) => setEditingPack({...editingPack, aspectRatio: e.target.value})}
+                onChange={(e) => {
+                  const nextPack = {...editingPack, aspectRatio: e.target.value};
+                  commitToHistory(nextPack);
+                }}
                 className={styles.ratioSelect}
               >
-                <option value="9:16">9:16 Portrait</option>
-                <option value="1:1">1:1 Square</option>
+                <option value="9:16">9:16 (Full Vertical)</option>
+                <option value="3:4">3:4 (Portrait Feed)</option>
               </select>
-              <button className={styles.editorSaveBtn} onClick={() => {
-                handleUpdatePack(editingPack);
-                alert("Pack updated!");
-              }}>Save Draft</button>
+
               <button className={styles.editorExportBtn} onClick={() => {
                 handleExportPack(editingPack);
               }}>
@@ -1027,7 +1188,7 @@ export default function Home() {
                       reader.onload = () => {
                         const newImg = { image: reader.result, overlays: [] };
                         const nextPack = {...editingPack, images: [...editingPack.images, newImg]};
-                        setEditingPack(nextPack);
+                        commitToHistory(nextPack);
                         setEditorIdx(nextPack.images.length - 1);
                       };
                       reader.readAsDataURL(file);
@@ -1038,7 +1199,9 @@ export default function Home() {
             </div>
 
             {/* ═══ Stage (Centered Canvas) ═══ */}
-            <div className={styles.editorStage}>
+              <div className={styles.editorStage} style={{
+                height: editingPack.aspectRatio === '1:1' ? '540px' : editingPack.aspectRatio === '3:4' ? '720px' : '960px'
+              }}>
               {editingPack.images.length > 1 && (
                 <>
                   <button 
@@ -1058,8 +1221,8 @@ export default function Home() {
 
               <div className={styles.canvasFrame} style={{ 
                 width: '540px', 
-                height: editingPack.aspectRatio === '1:1' ? '540px' : '960px', 
-                transform: `scale(${editingPack.aspectRatio === '1:1' ? 0.8 : 0.65})`,
+                height: editingPack.aspectRatio === '1:1' ? '540px' : editingPack.aspectRatio === '3:4' ? '720px' : '960px', 
+                transform: `scale(${editingPack.aspectRatio === '1:1' ? 0.8 : editingPack.aspectRatio === '3:4' ? 0.75 : 0.65})`,
                 transformOrigin: 'center center'
               }}>
                 <div className={styles.canvasWrapper} style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -1119,6 +1282,7 @@ export default function Home() {
                               const onMouseUp = () => {
                                 window.removeEventListener("mousemove", onMouseMove);
                                 window.removeEventListener("mouseup", onMouseUp);
+                                commitToHistory(editingPack);
                               };
                               window.addEventListener("mousemove", onMouseMove);
                               window.addEventListener("mouseup", onMouseUp);
@@ -1164,7 +1328,7 @@ export default function Home() {
                     <button className={styles.removeOverlay} onClick={() => {
                       const nextImages = [...editingPack.images];
                       nextImages[editorIdx].overlays = nextImages[editorIdx].overlays.filter((_, i) => i !== idx);
-                      setEditingPack(prev => ({ ...prev, images: nextImages }));
+                      commitToHistory({ ...editingPack, images: nextImages });
                     }}>✕</button>
                     <textarea 
                       className={styles.overlayTextarea}
@@ -1174,6 +1338,7 @@ export default function Home() {
                         nextImages[editorIdx].overlays[idx].text = e.target.value;
                         setEditingPack(prev => ({ ...prev, images: nextImages }));
                       }}
+                      onBlur={() => commitToHistory(editingPack)}
                       placeholder="Type something..."
                     />
                     
@@ -1185,7 +1350,7 @@ export default function Home() {
                           onClick={() => {
                             const nextImages = [...editingPack.images];
                             nextImages[editorIdx].overlays[idx].font = f;
-                            setEditingPack(prev => ({ ...prev, images: nextImages }));
+                            commitToHistory({ ...editingPack, images: nextImages });
                           }}
                         >
                           {f.toUpperCase()}
@@ -1201,7 +1366,7 @@ export default function Home() {
                           onClick={() => {
                             const nextImages = [...editingPack.images];
                             nextImages[editorIdx].overlays[idx].align = a;
-                            setEditingPack(prev => ({ ...prev, images: nextImages }));
+                            commitToHistory({ ...editingPack, images: nextImages });
                           }}
                         >
                           {a === 'left' && (
@@ -1237,7 +1402,7 @@ export default function Home() {
                           onClick={() => {
                             const nextImages = [...editingPack.images];
                             nextImages[editorIdx].overlays[idx].bgMode = b;
-                            setEditingPack(prev => ({ ...prev, images: nextImages }));
+                            commitToHistory({ ...editingPack, images: nextImages });
                           }}
                         >
                           {b === 'none' ? 'NO BG' : b.toUpperCase()}
@@ -1256,6 +1421,7 @@ export default function Home() {
                             nextImages[editorIdx].overlays[idx].size = parseInt(e.target.value);
                             setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
+                          onMouseUp={() => commitToHistory(editingPack)}
                         />
                       </div>
                       <div className={styles.rangeItem}>
@@ -1268,6 +1434,7 @@ export default function Home() {
                             nextImages[editorIdx].overlays[idx].fontSize = parseInt(e.target.value);
                             setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
+                          onMouseUp={() => commitToHistory(editingPack)}
                         />
                       </div>
                     </div>
@@ -1281,7 +1448,7 @@ export default function Home() {
                           onClick={() => {
                             const nextImages = [...editingPack.images];
                             nextImages[editorIdx].overlays[idx].color = c;
-                            setEditingPack(prev => ({ ...prev, images: nextImages }));
+                            commitToHistory({ ...editingPack, images: nextImages });
                           }}
                         />
                       ))}
@@ -1300,7 +1467,7 @@ export default function Home() {
                     text: "NEW TEXT", x: 50, y: 50, size: 30, color: "#ffffff", 
                     font: 'classic', bgMode: 'none', align: 'center', rotation: 0 
                   }];
-                  setEditingPack({...editingPack, images: nextImages});
+                  commitToHistory({...editingPack, images: nextImages});
                 }}>
                   <span style={{ fontSize: '18px' }}>＋</span> Add Text Layer
                 </button>
@@ -1311,13 +1478,13 @@ export default function Home() {
       )}
 
       {/* Past Carousels (for generator only) */}
-      {view === "generator" && history.length > 0 && (
+      {view === "generator" && resultHistory.length > 0 && (
         <section className={styles.historySection}>
           <div className={styles.historyHeader}>
-            <span className={styles.historyTitle}>Recent ({history.length})</span>
+            <span className={styles.historyTitle}>Recent ({resultHistory.length})</span>
           </div>
           <div className={styles.historyStrip}>
-            {history.map((item, i) => (
+            {resultHistory.map((item, i) => (
               <div
                 key={item.timestamp}
                 className={
@@ -1350,13 +1517,12 @@ export default function Home() {
           visibility: 'visible',
           background: '#000'
         }}>
-          <div ref={exportRef} className={styles.canvasWrapper} style={{ 
-            width: '540px', 
-            height: '960px', 
-            borderRadius: 0, 
-            border: 'none', 
-            boxShadow: 'none',
-            display: 'block' 
+          <div id="export-surface" ref={exportRef} style={{ 
+            width: '1080px', 
+            height: exportingPost.aspectRatio === '1:1' ? '1080px' : exportingPost.aspectRatio === '3:4' ? '1440px' : '1920px', 
+            position: 'relative',
+            overflow: 'hidden',
+            backgroundColor: '#000'
           }}>
             <img 
               src={exportingPost.image} 
@@ -1404,6 +1570,49 @@ export default function Home() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ CONFIRMATION MODAL ═══ */}
+      {confirmModal.show && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.confirmModal}>
+            <div className={styles.confirmTitle}>Unsaved Changes</div>
+            <p className={styles.confirmText}>
+              You have unsaved {view === "editor" ? "edits" : "generations"}. 
+              Moving away will discard them. What would you like to do?
+            </p>
+            <div className={styles.confirmActions}>
+              <button className={styles.confirmSaveBtn} onClick={() => {
+                if (view === "editor") handleUpdatePack(editingPack);
+                else if (result) handleSave(result);
+                
+                const { type, next } = confirmModal;
+                if (type === "view") setView(next);
+                else if (type === "mode") { setMode(next); handleStartFresh(); }
+                else if (type === "fresh") handleStartFresh();
+                
+                setConfirmModal({ show: false, type: null, next: null });
+              }}>
+                Save & Continue
+              </button>
+              <button className={styles.confirmDiscardBtn} onClick={() => {
+                const { type, next } = confirmModal;
+                if (type === "view") setView(next);
+                else if (type === "mode") { setMode(next); handleStartFresh(); }
+                else if (type === "fresh") handleStartFresh();
+                
+                setConfirmModal({ show: false, type: null, next: null });
+              }}>
+                Discard
+              </button>
+              <button className={styles.confirmCancelBtn} onClick={() => {
+                setConfirmModal({ show: false, type: null, next: null });
+              }}>
+                Cancel
+              </button>
             </div>
           </div>
         </div>
