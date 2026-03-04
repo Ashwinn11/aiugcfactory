@@ -67,6 +67,11 @@ export default function Home() {
   // Vibe input
   const [vibe, setVibe] = useState("");
 
+  // Planning
+  const [planning, setPlanning] = useState(false);
+  const [plannedScenes, setPlannedScenes] = useState(null);
+  const [selectedSceneIds, setSelectedSceneIds] = useState(new Set());
+
   // Generation
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
@@ -135,9 +140,74 @@ export default function Home() {
     }
   }, []);
 
+  // ──── Plan carousel ────
+  const handlePlan = useCallback(async () => {
+    if (!vibe.trim() || planning) return;
+    setPlanning(true);
+    setError(null);
+    setPlannedScenes(null);
+    setSelectedSceneIds(new Set());
+    setResult(null);
+
+    try {
+      const res = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vibe: vibe.trim(),
+          mode,
+          avatar: avatar ? { base64: avatar.base64, mimeType: avatar.mimeType } : undefined,
+          productImage:
+            mode === "ad" && productImage
+              ? { base64: productImage.base64, mimeType: productImage.mimeType }
+              : undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Planning failed");
+
+      setPlannedScenes(data.scenes);
+      // Auto-select first 5
+      const autoSelected = new Set();
+      data.scenes.slice(0, 5).forEach((_, i) => autoSelected.add(i));
+      setSelectedSceneIds(autoSelected);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPlanning(false);
+    }
+  }, [vibe, mode, avatar, productImage, planning]);
+
+  // ──── Update Planned Scene ────
+  const updatePlannedScene = (index, field, value) => {
+    setPlannedScenes((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  // ──── Toggle scene selection ────
+  const toggleSceneSelection = (index) => {
+    setSelectedSceneIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else if (next.size < 5) {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
   // ──── Generate carousel ────
   const handleGenerate = useCallback(async () => {
-    if (!vibe.trim() || generating) return;
+    if (!plannedScenes || selectedSceneIds.size === 0 || generating) return;
+
+    // Only send the selected scenes
+    const selectedScenes = plannedScenes.filter((_, i) => selectedSceneIds.has(i));
+
     setGenerating(true);
     setError(null);
     setSelectedIdx(0);
@@ -148,7 +218,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          vibe: vibe.trim(),
+          scenes: selectedScenes,
           mode,
           avatar: avatar ? { base64: avatar.base64, mimeType: avatar.mimeType } : undefined,
           productImage:
@@ -170,7 +240,7 @@ export default function Home() {
     } finally {
       setGenerating(false);
     }
-  }, [vibe, mode, avatar, productImage, generating]);
+  }, [vibe, mode, avatar, productImage, generating, plannedScenes, selectedSceneIds]);
 
   // ──── Download ────
   const handleDownload = useCallback((imageData, index) => {
@@ -196,7 +266,8 @@ export default function Home() {
   const handleKeyDown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      handleGenerate();
+      if (plannedScenes) handleGenerate();
+      else handlePlan();
     }
   };
 
@@ -345,47 +416,157 @@ export default function Home() {
       </section>
 
       {/* ═══ VIBE INPUT ═══ */}
-      <section className={styles.stepSection} style={{ animationDelay: "0.4s" }}>
-        <div className={styles.stepLabel}>
-          <div className={styles.stepNumber}>3</div>
-          <div className={styles.stepTitle}>Describe the vibe</div>
-        </div>
-        <div className={styles.vibeBox}>
-          <textarea
-            className={styles.vibeTextarea}
-            placeholder={currentMode?.placeholder || "Describe your vibe..."}
-            value={vibe}
-            onChange={(e) => setVibe(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={3}
-          />
-          <div className={styles.vibeFooter}>
-            <span className={styles.vibeHint}>⌘↵ to generate</span>
-          </div>
-        </div>
-        <div className={styles.vibeExamples}>
-          {currentMode?.vibes.map((v, i) => (
-            <button key={i} className={styles.vibeChip} onClick={() => setVibe(v)}>
-              {v}
-            </button>
-          ))}
-        </div>
-      </section>
+      {!plannedScenes && (
+        <>
+          <section className={styles.stepSection} style={{ animationDelay: "0.4s" }}>
+            <div className={styles.stepLabel}>
+              <div className={styles.stepNumber}>3</div>
+              <div className={styles.stepTitle}>Describe the vibe</div>
+            </div>
+            <div className={styles.vibeBox}>
+              <textarea
+                className={styles.vibeTextarea}
+                placeholder={currentMode?.placeholder || "Describe your vibe..."}
+                value={vibe}
+                onChange={(e) => setVibe(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={3}
+              />
+              <div className={styles.vibeFooter}>
+                <span className={styles.vibeHint}>⌘↵ to plan</span>
+              </div>
+            </div>
+            <div className={styles.vibeExamples}>
+              {currentMode?.vibes.map((v, i) => (
+                <button key={i} className={styles.vibeChip} onClick={() => setVibe(v)}>
+                  {v}
+                </button>
+              ))}
+            </div>
+          </section>
 
-      {/* ═══ Generate Button ═══ */}
-      <section className={styles.generateSection}>
-        <button
-          className={styles.generateBtn}
-          onClick={handleGenerate}
-          disabled={!vibe.trim() || generating}
-        >
-          {generating ? (
-            <><span className={styles.spinner} /> Generating your {currentMode?.label.toLowerCase()}…</>
-          ) : (
-            <>✦ Generate {currentMode?.label}</>
-          )}
-        </button>
-      </section>
+          {/* ═══ Plan Button ═══ */}
+          <section className={styles.generateSection}>
+            <button
+              className={styles.generateBtn}
+              onClick={handlePlan}
+              disabled={!vibe.trim() || planning}
+            >
+              {planning ? (
+                <><span className={styles.spinner} /> Planning scenes…</>
+              ) : (
+                <>✦ Plan Carousel</>
+              )}
+            </button>
+          </section>
+        </>
+      )}
+
+      {/* ═══ REVIEW PLAN ═══ */}
+      {plannedScenes && !result && (
+        <>
+          <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
+            <div className={styles.stepLabel}>
+              <div className={styles.stepNumber}>4</div>
+              <div className={styles.stepTitle}>Select & Edit Scenes</div>
+            </div>
+            <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
+              {plannedScenes.length} scenes planned. Select up to 5 to generate. ({selectedSceneIds.size}/5 selected)
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              {plannedScenes.map((scene, i) => {
+                const isSelected = selectedSceneIds.has(i);
+                const isMaxed = selectedSceneIds.size >= 5 && !isSelected;
+                const cameraColors = {
+                  selfie: "#4ade80", mirror_selfie: "#60a5fa", back_camera: "#f59e0b",
+                  pov: "#a78bfa", friend_candid: "#f472b6",
+                };
+                return (
+                  <div
+                    key={i}
+                    onClick={() => !isMaxed && toggleSceneSelection(i)}
+                    style={{
+                      display: "flex", flexDirection: "column", gap: "0.5rem",
+                      background: isSelected ? "#1a1a2e" : "#111",
+                      padding: "1rem", borderRadius: "12px",
+                      border: isSelected ? "2px solid #ecc245" : "1px solid #333",
+                      cursor: isMaxed ? "not-allowed" : "pointer",
+                      opacity: isMaxed ? 0.5 : 1,
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                        <div style={{
+                          width: "24px", height: "24px", borderRadius: "6px",
+                          border: isSelected ? "2px solid #ecc245" : "2px solid #555",
+                          background: isSelected ? "#ecc245" : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: "14px", color: "#000", fontWeight: "700",
+                          flexShrink: 0,
+                        }}>
+                          {isSelected ? "✓" : ""}
+                        </div>
+                        <span style={{ fontWeight: "600", color: isSelected ? "#ecc245" : "#aaa" }}>Scene {i + 1}</span>
+                        {scene.camera && (
+                          <span style={{
+                            fontSize: "0.7rem", padding: "2px 8px", borderRadius: "4px",
+                            background: (cameraColors[scene.camera] || "#666") + "22",
+                            color: cameraColors[scene.camera] || "#888",
+                            border: `1px solid ${cameraColors[scene.camera] || "#666"}44`,
+                            textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.5px",
+                          }}>
+                            {scene.camera?.replace("_", " ")}
+                          </span>
+                        )}
+                      </div>
+                      {scene.requires_avatar && (
+                        <span style={{ fontSize: "0.7rem", color: "#888" }}>👤 Avatar</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "0.95rem", color: "#ddd", fontStyle: "italic" }}>
+                      {scene.caption}
+                    </div>
+                    <textarea
+                      value={scene.prompt}
+                      onChange={(e) => { e.stopPropagation(); updatePlannedScene(i, 'prompt', e.target.value); }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        background: "#1a1a1a", color: "#ccc", border: "1px solid #333",
+                        padding: "0.5rem", borderRadius: "6px", width: "100%",
+                        fontFamily: "inherit", fontSize: "0.85rem",
+                        minHeight: "60px", resize: "vertical",
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              className={styles.avatarBtn}
+              style={{ marginTop: "1rem" }}
+              onClick={() => { setPlannedScenes(null); setSelectedSceneIds(new Set()); }}
+            >
+              ← Back to Vibe
+            </button>
+          </section>
+
+          {/* ═══ Generate Button ═══ */}
+          <section className={styles.generateSection}>
+            <button
+              className={styles.generateBtn}
+              onClick={handleGenerate}
+              disabled={generating || selectedSceneIds.size === 0}
+            >
+              {generating ? (
+                <><span className={styles.spinner} /> Generating {selectedSceneIds.size} image{selectedSceneIds.size !== 1 ? "s" : ""}…</>
+              ) : (
+                <>✦ Generate {selectedSceneIds.size} Selected Image{selectedSceneIds.size !== 1 ? "s" : ""}</>
+              )}
+            </button>
+          </section>
+        </>
+      )}
 
       {/* Error */}
       {error && <div className={styles.error}>⚠ {error}</div>}
@@ -435,7 +616,12 @@ export default function Home() {
               />
               {result.images[selectedIdx].caption && (
                 <div className={styles.selectedScene}>
-                  {result.images[selectedIdx].caption}
+                  <strong>Caption:</strong> {result.images[selectedIdx].caption}
+                </div>
+              )}
+              {result.images[selectedIdx].scene_prompt && (
+                <div className={styles.selectedScene} style={{ marginTop: '8px', fontSize: '0.9rem', color: '#888' }}>
+                  <strong>AI Scene Prompt:</strong> {result.images[selectedIdx].scene_prompt}
                 </div>
               )}
               <div className={styles.selectedActions}>
