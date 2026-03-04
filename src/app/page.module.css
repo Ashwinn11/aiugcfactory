@@ -174,6 +174,70 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
+   MODE SELECTOR
+   ═══════════════════════════════════════════════════════════ */
+
+.modeSelector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.modeCard {
+  padding: 16px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-1);
+  background: var(--bg-2);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.25s var(--ease-out);
+}
+
+.modeCard:hover {
+  border-color: var(--border-2);
+  background: var(--bg-3);
+}
+
+.modeCardActive {
+  composes: modeCard;
+  border-color: var(--amber-400);
+  background: rgba(251, 191, 36, 0.06);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.08);
+}
+
+.modeIcon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.modeLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+
+.modeDesc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UPLOAD ROW (avatar + product side by side)
+   ═══════════════════════════════════════════════════════════ */
+
+.uploadRow {
+  display: flex;
+  gap: 16px;
+}
+
+.uploadRow>* {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
    AVATAR SECTION
    ═══════════════════════════════════════════════════════════ */
 
@@ -186,6 +250,8 @@
   border: 1px solid var(--border-1);
   border-radius: var(--radius-lg);
   transition: border-color 0.2s ease;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .avatarArea:hover {
@@ -266,6 +332,7 @@
 }
 
 .avatarBtnPrimary:hover {
+  color: var(--amber-on);
   background: var(--amber-300);
   border-color: var(--amber-300);
 }
@@ -557,6 +624,7 @@
 }
 
 .sceneGenerateBtn:hover {
+  color: var(--amber-on);
   background: var(--amber-300);
   border-color: var(--amber-300);
 }
@@ -784,10 +852,11 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .downloadAllBtn:hover {
+  color: var(--amber-on);
   background: var(--amber-300);
 }
 
