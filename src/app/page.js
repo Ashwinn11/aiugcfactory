@@ -84,26 +84,100 @@ export default function Home() {
   // History
   const [history, setHistory] = useState([]);
 
-  // Saved Posts
-  const [savedPosts, setSavedPosts] = useState([]);
-  const [view, setView] = useState("generator"); // "generator" or "saved"
-  const [editingPost, setEditingPost] = useState(null);
+  // Packs (formerly savedPosts)
+  const [packs, setPacks] = useState([]);
+  const [view, setView] = useState("generator"); 
+  const [editingPack, setEditingPack] = useState(null);
+  const [editorIdx, setEditorIdx] = useState(0); 
+  const [exportQueue, setExportQueue] = useState([]);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // ──── Persistence ────
+  // ──── Persistence (IndexedDB for Large Image Data) ────
+  const [dbReady, setDbReady] = useState(false);
+
   useEffect(() => {
-    const saved = localStorage.getItem("ugc_saved_posts");
-    if (saved) {
+    const initDB = async () => {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open("UGCFactoryDB", 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("packs")) {
+            db.createObjectStore("packs", { keyPath: "id" });
+          }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+      });
+    };
+
+    const loadData = async () => {
       try {
-        setSavedPosts(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load saved posts");
+        const db = await initDB();
+        const transaction = db.transaction("packs", "readonly");
+        const store = transaction.objectStore("packs");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          let loadedPacks = request.result || [];
+          
+          // --- ONE TIME MIGRATION FROM LOCALSTORAGE ---
+          const oldData = localStorage.getItem("ugc_factory_packs");
+          if (oldData && loadedPacks.length === 0) {
+            try {
+              const parsed = JSON.parse(oldData);
+              const migrated = parsed.map(p => (!p.images ? {
+                id: p.id,
+                title: p.caption || "Untitled Pack",
+                type: p.mode || "photodump",
+                aspectRatio: "9:16",
+                images: [{ image: p.image, overlays: p.overlays || [] }],
+                savedAt: p.savedAt || Date.now()
+              } : p));
+              
+              // Parallel save migrated items to DB
+              const saveTx = db.transaction("packs", "readwrite");
+              const saveStore = saveTx.objectStore("packs");
+              migrated.forEach(item => saveStore.put(item));
+              
+              loadedPacks = migrated;
+              localStorage.removeItem("ugc_factory_packs"); // CLEAN UP
+              console.log("Migrated localStorage data to IndexedDB");
+            } catch (err) { console.error("Migration failed"); }
+          }
+          
+          // Sort by date newest first if not already
+          loadedPacks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+          setPacks(loadedPacks);
+          setDbReady(true);
+        };
+      } catch (err) {
+        console.error("DB Init failed:", err);
+        setDbReady(true); // Proceed even if empty
       }
-    }
+    };
+
+    loadData();
   }, []);
 
+  // Sync to IndexedDB on change (debounced via effect)
   useEffect(() => {
-    localStorage.setItem("ugc_saved_posts", JSON.stringify(savedPosts));
-  }, [savedPosts]);
+    if (!dbReady || packs.length === 0) return;
+    
+    const saveToDB = async () => {
+      const request = indexedDB.open("UGCFactoryDB", 1);
+      request.onsuccess = (e) => {
+        const db = e.target.result;
+        const transaction = db.transaction("packs", "readwrite");
+        const store = transaction.objectStore("packs");
+        
+        // We're keeping things simple: overwrite/put each pack from current memory state
+        // A more optimized version might track 'dirty' packs but this is fine for most uses
+        packs.forEach(p => store.put(p));
+      };
+    };
+    
+    saveToDB();
+  }, [packs, dbReady]);
 
   // ──── Load default avatar on mount ────
   useEffect(() => {
@@ -267,21 +341,35 @@ export default function Home() {
   }, [vibe, mode, avatar, productImage, generating, plannedScenes, selectedSceneIds]);
 
   // ──── Download ────
+  // ──── Batch Export Logic ────
+  useEffect(() => {
+    if (exportQueue.length > 0 && !exportingPost && !isExporting) {
+      const next = exportQueue[0];
+      setExportingPost(next);
+      setExportQueue(prev => prev.slice(1));
+    }
+  }, [exportQueue, exportingPost, isExporting]);
+
   const handleDownloadTrigger = useCallback((post) => {
-    // If it has no overlays, download base image directly
+    if (!post) return;
     if (!post.overlays || post.overlays.length === 0) {
       const a = document.createElement("a");
       a.href = post.image;
       a.download = `ugcfactory_${Date.now()}.png`;
       a.click();
     } else {
-      // Trigger offscreen full-resolution render
       setExportingPost(post);
     }
   }, []);
 
+  const handleExportPack = useCallback((pack) => {
+    if (!pack?.images) return;
+    setExportQueue([...pack.images]);
+  }, []);
+
   useEffect(() => {
     if (exportingPost && exportRef.current) {
+      setIsExporting(true);
       const capture = async () => {
         try {
           // Increase capture resolution to 3x for professional crispness (1620x2880)
@@ -302,33 +390,56 @@ export default function Home() {
         } catch (err) {
           console.error("Failed image capture:", err);
         } finally {
+          setIsExporting(false);
           setExportingPost(null);
         }
       };
-      
-      // Wait for React to mount the offscreen element (1.2s ensures images are decoded)
-      const timer = setTimeout(capture, 1200);
-      return () => clearTimeout(timer);
+      // 1.2s ensure fonts and base images are fully decoded in the offscreen frame
+      setTimeout(capture, 1200);
     }
   }, [exportingPost]);
 
-  // ──── Save Post ────
-  const handleSave = useCallback((post) => {
-    const newSavedPost = {
-      ...post,
-      id: `saved_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      savedAt: Date.now(),
-      overlays: []
+  // ──── Save Pack ────
+  const handleSave = useCallback((result) => {
+    if (!result?.images) return;
+    const newPack = {
+      id: `pack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      title: `${result.mode || 'Post'} - ${result.vibe || 'Untitled'}`,
+      type: result.mode,
+      aspectRatio: "9:16",
+      images: result.images.map(img => ({
+        image: img.image,
+        overlays: []
+      })),
+      savedAt: Date.now()
     };
-    setSavedPosts(prev => [newSavedPost, ...prev]);
+    setPacks(prev => [newPack, ...prev]);
+    alert("Saved to Library!");
+    setView("library");
   }, []);
 
-  const handleRemoveSaved = useCallback((id) => {
-    setSavedPosts(prev => prev.filter(p => p.id !== id));
+  const handleRemovePack = useCallback((id) => {
+    setPacks(prev => prev.filter(p => p.id !== id));
+    // Explicitly delete from DB
+    const request = indexedDB.open("UGCFactoryDB", 1);
+    request.onsuccess = (e) => {
+      const db = e.target.result;
+      const transaction = db.transaction("packs", "readwrite");
+      transaction.objectStore("packs").delete(id);
+    };
   }, []);
 
-  const handleUpdateOverlays = useCallback((id, overlays) => {
-    setSavedPosts(prev => prev.map(p => p.id === id ? { ...p, overlays } : p));
+  const handleUpdatePack = useCallback((updatedPack) => {
+    setPacks(prev => {
+      const index = prev.findIndex(p => p.id === updatedPack.id);
+      if (index !== -1) {
+        const next = [...prev];
+        next[index] = updatedPack;
+        return next;
+      } else {
+        return [updatedPack, ...prev];
+      }
+    });
   }, []);
 
   const handleDownloadAll = useCallback(() => {
@@ -372,442 +483,651 @@ export default function Home() {
             Generator
           </button>
           <button 
-            className={view === "saved" ? styles.navItemActive : styles.navItem}
-            onClick={() => setView("saved")}
+            className={view === "library" ? styles.navItemActive : styles.navItem}
+            onClick={() => setView("library")}
           >
-            Saved Library ({savedPosts.length})
+            Library
+          </button>
+          <button 
+            className={view === "editor" ? styles.navItemActive : styles.navItem}
+            onClick={() => {
+              if (packs.length > 0) {
+                setEditingPack(packs[0]);
+                setView("editor");
+              } else {
+                // Create blank pack
+                const newPack = {
+                  id: `pack_${Date.now()}`,
+                  title: "New Project",
+                  images: [],
+                  aspectRatio: "9:16",
+                  savedAt: Date.now()
+                };
+                setEditingPack(newPack);
+                setView("editor");
+              }
+            }}
+          >
+            Editor
           </button>
         </nav>
       </header>
 
-      {/* Hero */}
-      <section className={styles.hero}>
-        <h1 className={styles.heroTitle}>AI influencer content, in one click</h1>
-        <p className={styles.heroSub}>
-          Upload your face, pick a mode, describe the vibe — get 5 post‑worthy images with captions.
-        </p>
-      </section>
-
-      {/* ═══ MODE SELECTOR ═══ */}
-      <section className={styles.stepSection}>
-        <div className={styles.stepLabel}>
-          <div className={styles.stepNumber}>1</div>
-          <div className={styles.stepTitle}>What are you creating?</div>
-        </div>
-        <div className={styles.modeSelector}>
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              className={mode === m.id ? styles.modeCardActive : styles.modeCard}
-              onClick={() => {
-                setMode(m.id);
-                setVibe("");
-              }}
-            >
-              <div className={styles.modeIcon}>{m.icon}</div>
-              <div className={styles.modeLabel}>{m.label}</div>
-              <div className={styles.modeDesc}>{m.desc}</div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* ═══ AVATAR + PRODUCT ═══ */}
-      <section className={styles.stepSection} style={{ animationDelay: "0.2s" }}>
-        <div className={styles.stepLabel}>
-          <div className={styles.stepNumber}>2</div>
-          <div className={styles.stepTitle}>
-            {mode === "ad" ? "Your face + product" : "Your avatar"}
-            <span className={styles.stepOptional}> (optional)</span>
-          </div>
-        </div>
-        <div className={styles.uploadRow}>
-          {/* Avatar */}
-          <div className={styles.avatarArea}>
-            <div className={styles.avatarPreview}>
-              {avatar?.url ? (
-                <img src={avatar.url} alt="Avatar" />
-              ) : avatar?.base64 ? (
-                <img src={`data:${avatar.mimeType};base64,${avatar.base64}`} alt="Avatar" />
-              ) : (
-                <span className={styles.avatarEmpty}>👤</span>
-              )}
-            </div>
-            <div className={styles.avatarInfo}>
-              <div className={styles.avatarName}>
-                {avatar ? avatar.name || "Avatar loaded" : "Your face"}
-              </div>
-              <div className={styles.avatarHint}>
-                {avatar ? "Same person in every image" : "Upload for character consistency"}
-              </div>
-            </div>
-            <div className={styles.avatarActions}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className={styles.avatarUploadInput}
-                onChange={handleAvatarUpload}
-              />
-              <button
-                className={avatar ? styles.avatarBtn : styles.avatarBtnPrimary}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={avatarLoading}
-              >
-                {avatarLoading ? "…" : avatar ? "Change" : "Upload"}
-              </button>
-              {avatar && (
-                <button className={styles.avatarBtn} onClick={() => setAvatar(null)}>
-                  ✕
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Product image (ad mode only) */}
-          {mode === "ad" && (
-            <div className={styles.avatarArea}>
-              <div className={styles.avatarPreview}>
-                {productImage?.url ? (
-                  <img src={productImage.url} alt="Product" />
-                ) : (
-                  <span className={styles.avatarEmpty}>📦</span>
-                )}
-              </div>
-              <div className={styles.avatarInfo}>
-                <div className={styles.avatarName}>
-                  {productImage ? productImage.name || "Product loaded" : "Product image"}
-                </div>
-                <div className={styles.avatarHint}>
-                  {productImage
-                    ? "This product in every shot"
-                    : "Upload the product to feature"}
-                </div>
-              </div>
-              <div className={styles.avatarActions}>
-                <input
-                  ref={productInputRef}
-                  type="file"
-                  accept="image/*"
-                  className={styles.avatarUploadInput}
-                  onChange={handleProductUpload}
-                />
-                <button
-                  className={productImage ? styles.avatarBtn : styles.avatarBtnPrimary}
-                  onClick={() => productInputRef.current?.click()}
-                  disabled={productLoading}
-                >
-                  {productLoading ? "…" : productImage ? "Change" : "Upload"}
-                </button>
-                {productImage && (
-                  <button className={styles.avatarBtn} onClick={() => setProductImage(null)}>
-                    ✕
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ═══ VIBE INPUT ═══ */}
-      {!plannedScenes && (
+      {/* ═══ GENERATOR VIEW ═══ */}
+      {view === "generator" && (
         <>
-          <section className={styles.stepSection} style={{ animationDelay: "0.4s" }}>
+          {/* Hero */}
+          <section className={styles.hero}>
+            <h1 className={styles.heroTitle}>AI influencer content, in one click</h1>
+            <p className={styles.heroSub}>
+              Upload your face, pick a mode, describe the vibe — get 5 post‑worthy images with captions.
+            </p>
+          </section>
+
+          {/* ═══ MODE SELECTOR ═══ */}
+          <section className={styles.stepSection}>
             <div className={styles.stepLabel}>
-              <div className={styles.stepNumber}>3</div>
-              <div className={styles.stepTitle}>Describe the vibe</div>
+              <div className={styles.stepNumber}>1</div>
+              <div className={styles.stepTitle}>What are you creating?</div>
             </div>
-            <div className={styles.vibeBox}>
-              <textarea
-                className={styles.vibeTextarea}
-                placeholder={currentMode?.placeholder || "Describe your vibe..."}
-                value={vibe}
-                onChange={(e) => setVibe(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={3}
-              />
-              <div className={styles.vibeFooter}>
-                <span className={styles.vibeHint}>⌘↵ to plan</span>
-              </div>
-            </div>
-            <div className={styles.vibeExamples}>
-              {currentMode?.vibes.map((v, i) => (
-                <button key={i} className={styles.vibeChip} onClick={() => setVibe(v)}>
-                  {v}
+            <div className={styles.modeSelector}>
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  className={mode === m.id ? styles.modeCardActive : styles.modeCard}
+                  onClick={() => {
+                    setMode(m.id);
+                    setVibe("");
+                  }}
+                >
+                  <div className={styles.modeIcon}>{m.icon}</div>
+                  <div className={styles.modeLabel}>{m.label}</div>
+                  <div className={styles.modeDesc}>{m.desc}</div>
                 </button>
               ))}
             </div>
           </section>
 
-          {/* ═══ Plan Button ═══ */}
-          <section className={styles.generateSection}>
-            <button
-              className={styles.generateBtn}
-              onClick={handlePlan}
-              disabled={!vibe.trim() || planning}
-            >
-              {planning ? (
-                <><span className={styles.spinner} /> Planning scenes…</>
-              ) : (
-                <>✦ Plan Carousel</>
-              )}
-            </button>
-          </section>
-        </>
-      )}
-
-      {/* ═══ REVIEW PLAN ═══ */}
-      {plannedScenes && !result && (
-        <>
-          <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
+          {/* ═══ AVATAR + PRODUCT ═══ */}
+          <section className={styles.stepSection} style={{ animationDelay: "0.2s" }}>
             <div className={styles.stepLabel}>
-              <div className={styles.stepNumber}>4</div>
-              <div className={styles.stepTitle}>Select & Edit Scenes</div>
+              <div className={styles.stepNumber}>2</div>
+              <div className={styles.stepTitle}>
+                {mode === "ad" ? "Your face + product" : "Your avatar"}
+                <span className={styles.stepOptional}> (optional)</span>
+              </div>
             </div>
-            <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
-              {plannedScenes.length} scenes planned. Select up to 5 to generate. ({selectedSceneIds.size}/5 selected)
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {plannedScenes.map((scene, i) => {
-                const isSelected = selectedSceneIds.has(i);
-                const isMaxed = selectedSceneIds.size >= 5 && !isSelected;
-                const cameraColors = {
-                  selfie: "#4ade80", mirror_selfie: "#60a5fa", back_camera: "#f59e0b",
-                  pov: "#a78bfa", friend_candid: "#f472b6",
-                };
-                return (
-                  <div
-                    key={i}
-                    onClick={() => !isMaxed && toggleSceneSelection(i)}
-                    style={{
-                      display: "flex", flexDirection: "column", gap: "0.5rem",
-                      background: isSelected ? "#1a1a2e" : "#111",
-                      padding: "1rem", borderRadius: "12px",
-                      border: isSelected ? "2px solid #ecc245" : "1px solid #333",
-                      cursor: isMaxed ? "not-allowed" : "pointer",
-                      opacity: isMaxed ? 0.5 : 1,
-                      transition: "all 0.2s ease",
-                    }}
+            <div className={styles.uploadRow}>
+              {/* Avatar */}
+              <div className={styles.avatarArea}>
+                <div className={styles.avatarPreview}>
+                  {avatar?.url ? (
+                    <img src={avatar.url} alt="Avatar" />
+                  ) : avatar?.base64 ? (
+                    <img src={`data:${avatar.mimeType};base64,${avatar.base64}`} alt="Avatar" />
+                  ) : (
+                    <span className={styles.avatarEmpty}>👤</span>
+                  )}
+                </div>
+                <div className={styles.avatarInfo}>
+                  <div className={styles.avatarName}>
+                    {avatar ? avatar.name || "Avatar loaded" : "Your face"}
+                  </div>
+                  <div className={styles.avatarHint}>
+                    {avatar ? "Same person in every image" : "Upload for character consistency"}
+                  </div>
+                </div>
+                <div className={styles.avatarActions}>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className={styles.avatarUploadInput}
+                    onChange={handleAvatarUpload}
+                  />
+                  <button
+                    className={avatar ? styles.avatarBtn : styles.avatarBtnPrimary}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={avatarLoading}
                   >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{
-                          width: "24px", height: "24px", borderRadius: "6px",
-                          border: isSelected ? "2px solid #ecc245" : "2px solid #555",
-                          background: isSelected ? "#ecc245" : "transparent",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: "14px", color: "#000", fontWeight: "700",
-                          flexShrink: 0,
-                        }}>
-                          {isSelected ? "✓" : ""}
-                        </div>
-                        <span style={{ fontWeight: "600", color: isSelected ? "#ecc245" : "#aaa" }}>Scene {i + 1}</span>
-                        {scene.camera && (
-                          <span style={{
-                            fontSize: "0.7rem", padding: "2px 8px", borderRadius: "4px",
-                            background: (cameraColors[scene.camera] || "#666") + "22",
-                            color: cameraColors[scene.camera] || "#888",
-                            border: `1px solid ${cameraColors[scene.camera] || "#666"}44`,
-                            textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.5px",
-                          }}>
-                            {scene.camera?.replace("_", " ")}
-                          </span>
-                        )}
-                      </div>
-                      {scene.requires_avatar && (
-                        <span style={{ fontSize: "0.7rem", color: "#888" }}>👤 Avatar</span>
-                      )}
+                    {avatarLoading ? "…" : avatar ? "Change" : "Upload"}
+                  </button>
+                  {avatar && (
+                    <button className={styles.avatarBtn} onClick={() => setAvatar(null)}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Product image (ad mode only) */}
+              {mode === "ad" && (
+                <div className={styles.avatarArea}>
+                  <div className={styles.avatarPreview}>
+                    {productImage?.url ? (
+                      <img src={productImage.url} alt="Product" />
+                    ) : (
+                      <span className={styles.avatarEmpty}>📦</span>
+                    )}
+                  </div>
+                  <div className={styles.avatarInfo}>
+                    <div className={styles.avatarName}>
+                      {productImage ? productImage.name || "Product loaded" : "Product image"}
                     </div>
-                    <div style={{ fontSize: "0.95rem", color: "#ddd", fontStyle: "italic" }}>
-                      {scene.caption}
+                    <div className={styles.avatarHint}>
+                      {productImage
+                        ? "This product in every shot"
+                        : "Upload the product to feature"}
                     </div>
-                    <textarea
-                      value={scene.prompt}
-                      onChange={(e) => { e.stopPropagation(); updatePlannedScene(i, 'prompt', e.target.value); }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        background: "#1a1a1a", color: "#ccc", border: "1px solid #333",
-                        padding: "0.5rem", borderRadius: "6px", width: "100%",
-                        fontFamily: "inherit", fontSize: "0.85rem",
-                        minHeight: "60px", resize: "vertical",
-                      }}
+                  </div>
+                  <div className={styles.avatarActions}>
+                    <input
+                      ref={productInputRef}
+                      type="file"
+                      accept="image/*"
+                      className={styles.avatarUploadInput}
+                      onChange={handleProductUpload}
                     />
-                  </div>
-                );
-              })}
-            </div>
-            <button
-              className={styles.avatarBtn}
-              style={{ marginTop: "1rem" }}
-              onClick={() => { setPlannedScenes(null); setSelectedSceneIds(new Set()); }}
-            >
-              ← Back to Vibe
-            </button>
-          </section>
-
-          {/* ═══ Generate Button ═══ */}
-          <section className={styles.generateSection}>
-            <button
-              className={styles.generateBtn}
-              onClick={handleGenerate}
-              disabled={generating || selectedSceneIds.size === 0}
-            >
-              {generating ? (
-                <><span className={styles.spinner} /> Generating {selectedSceneIds.size} image{selectedSceneIds.size !== 1 ? "s" : ""}…</>
-              ) : (
-                <>✦ Generate {selectedSceneIds.size} Selected Image{selectedSceneIds.size !== 1 ? "s" : ""}</>
-              )}
-            </button>
-          </section>
-        </>
-      )}
-
-      {/* Error */}
-      {error && <div className={styles.error}>⚠ {error}</div>}
-
-      {/* Loading */}
-      {generating && (
-        <div className={styles.loadingResult}>
-          <div className={styles.loadingLens} />
-          <div className={styles.loadingText}>Creating your {currentMode?.label.toLowerCase()}…</div>
-          <div className={styles.loadingSubtext}>
-            {avatar ? "Character-consistent " : ""}5 images + captions in one shot
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Carousel Result ═══ */}
-      {result && !generating && view === "generator" && (
-        <section className={styles.carouselSection}>
-          <div className={styles.carouselLabel}>
-            <span>◉</span> Your {currentMode?.label.toLowerCase()} — {result.images.length} images
-          </div>
-
-          <div className={styles.carouselTrack}>
-            {result.images.map((item, i) => (
-              <div
-                key={item.timestamp}
-                className={selectedIdx === i ? styles.carouselSlideActive : styles.carouselSlide}
-                onClick={() => setSelectedIdx(i)}
-              >
-                <img src={item.image} alt={`Image ${i + 1}`} />
-                <div className={styles.carouselSlideInfo}>
-                  <div className={styles.carouselSlideIndex}>#{i + 1}</div>
-                  <div className={styles.carouselSlideScene}>
-                    {item.caption || "—"}
+                    <button
+                      className={productImage ? styles.avatarBtn : styles.avatarBtnPrimary}
+                      onClick={() => productInputRef.current?.click()}
+                      disabled={productLoading}
+                    >
+                      {productLoading ? "…" : productImage ? "Change" : "Upload"}
+                    </button>
+                    {productImage && (
+                      <button className={styles.avatarBtn} onClick={() => setProductImage(null)}>
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          {result.images[selectedIdx] && (
-            <div className={styles.selectedDetail}>
-              <img
-                className={styles.selectedImage}
-                src={result.images[selectedIdx].image}
-                alt={`Selected image ${selectedIdx + 1}`}
-              />
-              {result.images[selectedIdx].caption && (
-                <div className={styles.selectedScene}>
-                  <strong>Caption:</strong> {result.images[selectedIdx].caption}
-                </div>
               )}
-              {result.images[selectedIdx].scene_prompt && (
-                <div className={styles.selectedScene} style={{ marginTop: '8px', fontSize: '0.9rem', color: '#888' }}>
-                  <strong>AI Scene Prompt:</strong> {result.images[selectedIdx].scene_prompt}
-                </div>
-              )}
-              <div className={styles.selectedActions}>
-                <button
-                  className={styles.actionBtn}
-                  onClick={() => handleDownloadTrigger(result.images[selectedIdx])}
-                >
-                  ↓ Download
-                </button>
-                <button
-                  className={styles.actionBtnSuccess}
-                  onClick={() => {
-                    handleSave(result.images[selectedIdx]);
-                  }}
-                >
-                  {savedPosts.some(p => p.image === result.images[selectedIdx].image) ? "♥ Saved!" : "♥ Save to Library"}
-                </button>
-              </div>
             </div>
+          </section>
+
+          {/* ═══ VIBE INPUT ═══ */}
+          {!plannedScenes && (
+            <>
+              <section className={styles.stepSection} style={{ animationDelay: "0.4s" }}>
+                <div className={styles.stepLabel}>
+                  <div className={styles.stepNumber}>3</div>
+                  <div className={styles.stepTitle}>Describe the vibe</div>
+                </div>
+                <div className={styles.vibeBox}>
+                  <textarea
+                    className={styles.vibeTextarea}
+                    placeholder={currentMode?.placeholder || "Describe your vibe..."}
+                    value={vibe}
+                    onChange={(e) => setVibe(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    rows={3}
+                  />
+                  <div className={styles.vibeFooter}>
+                    <span className={styles.vibeHint}>⌘↵ to plan</span>
+                  </div>
+                </div>
+                <div className={styles.vibeExamples}>
+                  {currentMode?.vibes.map((v, i) => (
+                    <button key={i} className={styles.vibeChip} onClick={() => setVibe(v)}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* ═══ Plan Button ═══ */}
+              <section className={styles.generateSection}>
+                <button
+                  className={styles.generateBtn}
+                  onClick={handlePlan}
+                  disabled={!vibe.trim() || planning}
+                >
+                  {planning ? (
+                    <><span className={styles.spinner} /> Planning scenes…</>
+                  ) : (
+                    <>✦ Plan Carousel</>
+                  )}
+                </button>
+              </section>
+
+              {/* Error */}
+              {error && <div className={styles.error}>⚠ {error}</div>}
+
+              {/* Loading */}
+              {generating && (
+                <div className={styles.loadingResult}>
+                  <div className={styles.loadingLens} />
+                  <div className={styles.loadingText}>Creating your {currentMode?.label.toLowerCase()}…</div>
+                  <div className={styles.loadingSubtext}>
+                    {avatar ? "Character-consistent " : ""}5 images + captions in one shot
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
-          <div className={styles.downloadAllBar}>
-            <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
-              ↓ Download All {result.images.length} Images
-            </button>
-          </div>
-        </section>
+          {/* ═══ REVIEW PLAN ═══ */}
+          {plannedScenes && !result && (
+            <>
+              <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
+                <div className={styles.stepLabel}>
+                  <div className={styles.stepNumber}>4</div>
+                  <div className={styles.stepTitle}>Select & Edit Scenes</div>
+                </div>
+                <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
+                  {plannedScenes.length} scenes planned. Select up to 5 to generate. ({selectedSceneIds.size}/5 selected)
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  {plannedScenes.map((scene, i) => {
+                    const isSelected = selectedSceneIds.has(i);
+                    const isMaxed = selectedSceneIds.size >= 5 && !isSelected;
+                    const cameraColors = {
+                      selfie: "#4ade80", mirror_selfie: "#60a5fa", back_camera: "#f59e0b",
+                      pov: "#a78bfa", friend_candid: "#f472b6",
+                    };
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => !isMaxed && toggleSceneSelection(i)}
+                        style={{
+                          display: "flex", flexDirection: "column", gap: "0.5rem",
+                          background: isSelected ? "#1a1a2e" : "#111",
+                          padding: "1rem", borderRadius: "12px",
+                          border: isSelected ? "2px solid #ecc245" : "1px solid #333",
+                          cursor: isMaxed ? "not-allowed" : "pointer",
+                          opacity: isMaxed ? 0.5 : 1,
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                            <div style={{
+                              width: "24px", height: "24px", borderRadius: "6px",
+                              border: isSelected ? "2px solid #ecc245" : "2px solid #555",
+                              background: isSelected ? "#ecc245" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: "14px", color: "#000", fontWeight: "700",
+                              flexShrink: 0,
+                            }}>
+                              {isSelected ? "✓" : ""}
+                            </div>
+                            <span style={{ fontWeight: "600", color: isSelected ? "#ecc245" : "#aaa" }}>Scene {i + 1}</span>
+                            {scene.camera && (
+                              <span style={{
+                                fontSize: "0.7rem", padding: "2px 8px", borderRadius: "4px",
+                                background: (cameraColors[scene.camera] || "#666") + "22",
+                                color: cameraColors[scene.camera] || "#888",
+                                border: `1px solid ${cameraColors[scene.camera] || "#666"}44`,
+                                textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.5px",
+                              }}>
+                                {scene.camera?.replace("_", " ")}
+                              </span>
+                            )}
+                          </div>
+                          {scene.requires_avatar && (
+                            <span style={{ fontSize: "0.7rem", color: "#888" }}>👤 Avatar</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.95rem", color: "#ddd", fontStyle: "italic" }}>
+                          {scene.caption}
+                        </div>
+                        <textarea
+                          value={scene.prompt}
+                          onChange={(e) => { e.stopPropagation(); updatePlannedScene(i, 'prompt', e.target.value); }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            background: "#1a1a1a", color: "#ccc", border: "1px solid #333",
+                            padding: "0.5rem", borderRadius: "6px", width: "100%",
+                            fontFamily: "inherit", fontSize: "0.85rem",
+                            minHeight: "60px", resize: "vertical",
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  className={styles.avatarBtn}
+                  style={{ marginTop: "1rem" }}
+                  onClick={() => { setPlannedScenes(null); setSelectedSceneIds(new Set()); }}
+                >
+                  ← Back to Vibe
+                </button>
+              </section>
+
+              {/* ═══ Generate Button ═══ */}
+              <section className={styles.generateSection}>
+                <button
+                  className={styles.generateBtn}
+                  onClick={handleGenerate}
+                  disabled={generating || selectedSceneIds.size === 0}
+                >
+                  {generating ? (
+                    <><span className={styles.spinner} /> Generating {selectedSceneIds.size} image{selectedSceneIds.size !== 1 ? "s" : ""}…</>
+                  ) : (
+                    <>✦ Generate {selectedSceneIds.size} Selected Image{selectedSceneIds.size !== 1 ? "s" : ""}</>
+                  )}
+                </button>
+              </section>
+            </>
+          )}
+
+          {/* ═══ Carousel Result ═══ */}
+          {result && !generating && (
+            <section className={styles.carouselSection}>
+              <div className={styles.carouselLabel}>
+                <span>◉</span> Your {currentMode?.label.toLowerCase()} — {result.images.length} images
+              </div>
+
+              <div className={styles.carouselTrack}>
+                {result.images.map((item, i) => (
+                  <div
+                    key={item.timestamp}
+                    className={selectedIdx === i ? styles.carouselSlideActive : styles.carouselSlide}
+                    onClick={() => setSelectedIdx(i)}
+                  >
+                    <img src={item.image} alt={`Image ${i + 1}`} />
+                    <div className={styles.carouselSlideInfo}>
+                      <div className={styles.carouselSlideIndex}>#{i + 1}</div>
+                      <div className={styles.carouselSlideScene}>
+                        {item.caption || "—"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {result.images[selectedIdx] && (
+                <div className={styles.selectedDetail}>
+                  <img
+                    className={styles.selectedImage}
+                    src={result.images[selectedIdx].image}
+                    alt={`Selected image ${selectedIdx + 1}`}
+                  />
+                  {result.images[selectedIdx].caption && (
+                    <div className={styles.selectedScene}>
+                      <strong>Caption:</strong> {result.images[selectedIdx].caption}
+                    </div>
+                  )}
+                  {result.images[selectedIdx].scene_prompt && (
+                    <div className={styles.selectedScene} style={{ marginTop: '8px', fontSize: '0.9rem', color: '#888' }}>
+                      <strong>AI Scene Prompt:</strong> {result.images[selectedIdx].scene_prompt}
+                    </div>
+                  )}
+                  <div className={styles.selectedActions}>
+                    <button
+                      className={styles.actionBtn}
+                      onClick={() => handleDownloadTrigger(result.images[selectedIdx])}
+                    >
+                      ↓ Download
+                    </button>
+                    <button
+                      className={styles.actionBtnSuccess}
+                      onClick={() => {
+                        handleSave(result);
+                      }}
+                    >
+                      {packs.some(p => p.images.some(img => img.image === result.images[0].image)) ? "♥ Saved!" : "♥ Save to Library"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className={styles.downloadAllBar}>
+                <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
+                  ↓ Download All {result.images.length} Images
+                </button>
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {/* ═══ SAVED LIBRARY VIEW ═══ */}
-      {view === "saved" && (
+      {view === "library" && (
         <section className={styles.stepSection}>
-          <div className={styles.stepLabel}>
-            <div className={styles.stepNumber}>★</div>
-            <div className={styles.stepTitle}>Your Saved Posts</div>
+          <div className={styles.libraryHeader}>
+            <div className={styles.stepLabel}>
+              <div className={styles.stepNumber}>★</div>
+              <div className={styles.stepTitle}>Your Saved Packs</div>
+            </div>
+            <button className={styles.newPackBtn} onClick={() => {
+              const newPack = {
+                id: `pack_${Date.now()}`,
+                title: "New Project",
+                images: [],
+                aspectRatio: "9:16",
+                savedAt: Date.now()
+              };
+              setEditingPack(newPack);
+              setEditorIdx(0);
+              setView("editor");
+            }}>＋ New Pack</button>
           </div>
           
-          {savedPosts.length === 0 ? (
+          {packs.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>📂</div>
               <div className={styles.emptyTitle}>Nothing saved yet</div>
               <div className={styles.emptyDesc}>
-                Generate some images and click "Save to Library" to see them here.
+                Generate some images or create a new pack to see them here.
               </div>
             </div>
           ) : (
             <div className={styles.savedGrid}>
-              {savedPosts.map((post) => (
-                <div key={post.id} className={styles.savedCard}>
-                  {/* Miniature 540x960 surface scaled down for grid view */}
+              {packs.map((pack) => (
+                <div key={pack.id} className={styles.savedCard}>
                   <div className={styles.savedImageWrapper}>
-                    <div style={{ width: '540px', height: '960px', transform: 'scale(0.4)', transformOrigin: 'top left' }}>
-                      <img src={post.image} alt="Saved post" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    {/* Render overlays */}
-                    <div className={styles.savedOverlay}>
-                      {post.overlays?.map((ov, idx) => {
-                        // Logic for contrast on solid bg
+                    <div style={{ 
+                      width: '540px', 
+                      height: pack.aspectRatio === '1:1' ? '540px' : '960px', 
+                      transform: 'scale(0.4)', 
+                      transformOrigin: 'top left' 
+                    }}>
+                      {pack.images.length > 0 && (
+                        <img src={pack.images[0].image} alt="Pack cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      )}
+                      {/* Overlays preview on cover if any */}
+                      <div className={styles.savedOverlay}>
+                        {pack.images[0]?.overlays?.map((ov, idx) => {
+                          const isSolid = ov.bgMode === 'solid';
+                          const selectedColor = ov.color || "#ffffff";
+                          const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
+                          const bgColor = isSolid ? selectedColor : 'transparent';
+                          const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
+                          return (
+                            <div key={idx} className={styles.textOverlay} style={{
+                              position: "absolute",
+                              left: `${ov.x}%`,
+                              top: `${ov.y}%`,
+                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
+                              fontSize: `${ov.fontSize || 24}px`,
+                            }}>
+                              <span style={{ color: textColor, backgroundColor: bgColor }}>{ov.text}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={styles.savedCardActions}>
+                    <button className={styles.savedActionBtn} onClick={() => {
+                      setEditingPack(pack);
+                      setEditorIdx(0);
+                      setView("editor");
+                    }}>✎</button>
+                    <button className={styles.savedActionBtn} style={{ background: "rgba(239, 68, 68, 0.6)" }} onClick={() => handleRemovePack(pack.id)}>✕</button>
+                  </div>
+                  <div className={styles.savedCardInfo}>
+                    <div className={styles.savedCardCaption}>{pack.title}</div>
+                    <div className={styles.savedCardMeta}>{pack.images.length} Images • {pack.aspectRatio}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ═══ FULL PAGE EDITOR VIEW ═══ */}
+      {view === "editor" && editingPack && (
+        <section className={styles.editorView}>
+          <div className={styles.editorHeader}>
+            <div className={styles.editorHeaderLeft}>
+              <button className={styles.editorBackBtn} onClick={() => setView("library")}>← Back</button>
+              <div className={styles.editorTitle}>{editingPack.title}</div>
+            </div>
+            <div className={styles.editorControls}>
+              <select 
+                value={editingPack.aspectRatio} 
+                onChange={(e) => setEditingPack({...editingPack, aspectRatio: e.target.value})}
+                className={styles.ratioSelect}
+              >
+                <option value="9:16">9:16 Portrait</option>
+                <option value="1:1">1:1 Square</option>
+              </select>
+              <button className={styles.editorSaveBtn} onClick={() => {
+                handleUpdatePack(editingPack);
+                alert("Pack updated!");
+              }}>Save Draft</button>
+              <button className={styles.editorExportBtn} onClick={() => {
+                handleExportPack(editingPack);
+              }}>
+                {exportQueue.length > 0 ? `Exporting (${exportQueue.length})` : 'Export Pack'}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.editorMain}>
+            {/* ═══ Left Sidebar (Asset Management) ═══ */}
+            <div className={styles.editorAssetPanel}>
+              <div className={styles.sectionTitle}>Assets</div>
+              <div className={styles.thumbnailStrip}>
+                {editingPack.images.map((img, i) => (
+                  <div 
+                    key={i} 
+                    className={editorIdx === i ? styles.thumbItemActive : styles.thumbItem}
+                    onClick={() => setEditorIdx(i)}
+                  >
+                    <img src={img.image} alt={`Slide ${i+1}`} />
+                  </div>
+                ))}
+                <label className={styles.addThumbBtn}>
+                  <span style={{ fontSize: '1.2rem' }}>＋</span>
+                  <span>Add</span>
+                  <input 
+                    type="file" 
+                    hidden 
+                    accept="image/*" 
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const newImg = { image: reader.result, overlays: [] };
+                        const nextPack = {...editingPack, images: [...editingPack.images, newImg]};
+                        setEditingPack(nextPack);
+                        setEditorIdx(nextPack.images.length - 1);
+                      };
+                      reader.readAsDataURL(file);
+                    }} 
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* ═══ Stage (Centered Canvas) ═══ */}
+            <div className={styles.editorStage}>
+              {editingPack.images.length > 1 && (
+                <>
+                  <button 
+                    className={styles.navArrowLeft} 
+                    onClick={() => setEditorIdx(prev => prev > 0 ? prev - 1 : editingPack.images.length - 1)}
+                  >
+                    ‹
+                  </button>
+                  <button 
+                    className={styles.navArrowRight} 
+                    onClick={() => setEditorIdx(prev => (prev + 1) % editingPack.images.length)}
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
+              <div className={styles.canvasFrame} style={{ 
+                width: '540px', 
+                height: editingPack.aspectRatio === '1:1' ? '540px' : '960px', 
+                transform: `scale(${editingPack.aspectRatio === '1:1' ? 0.8 : 0.65})`,
+                transformOrigin: 'center center'
+              }}>
+                <div className={styles.canvasWrapper} style={{ width: '100%', height: '100%', position: 'relative' }}>
+                  {editingPack.images[editorIdx] ? (
+                    <>
+                      <img 
+                        src={editingPack.images[editorIdx].image} 
+                        alt="Editing" 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      />
+                      {editingPack.images[editorIdx].overlays?.map((ov, idx) => {
                         const isSolid = ov.bgMode === 'solid';
-                        const isTrans = ov.bgMode === 'translucent';
                         const isOutline = ov.bgMode === 'outline';
-                        
                         const selectedColor = ov.color || "#ffffff";
                         const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
-                        
-                        const bgColor = isSolid ? selectedColor : (isTrans ? 'rgba(0,0,0,0.4)' : 'transparent');
+                        const bgColor = isSolid ? selectedColor : 'transparent';
                         const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
-                        
-                        // Robust 8-directional outline
                         const outlineColor = isLight ? '#000000' : '#ffffff';
                         const outlineShadow = isOutline ? `
                           1px 1px 0 ${outlineColor}, -1px -1px 0 ${outlineColor}, 
                           1px -1px 0 ${outlineColor}, -1px 1px 0 ${outlineColor},
                           0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
-                          1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor}
+                          1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor},
+                          2px 2px 2px rgba(0,0,0,0.3)
                         ` : '';
 
                         return (
-                          <div key={idx} className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`} style={{
-                            position: "absolute",
-                            left: `${ov.x}%`,
-                            top: `${ov.y}%`,
-                            transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
-                            fontSize: `${ov.fontSize || 24}px`, // Now identical wrap as it's within a 540px scaled container
-                          }}>
+                          <div 
+                            key={idx}
+                            className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`}
+                            style={{
+                              left: `${ov.x}%`,
+                              top: `${ov.y}%`,
+                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
+                              fontSize: `${ov.fontSize || 24}px`
+                            }}
+                            onMouseDown={(e) => {
+                              const startX = e.clientX;
+                              const startY = e.clientY;
+                              const startPosX = ov.x;
+                              const startPosY = ov.y;
+                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
+                              
+                              const onMouseMove = (moveE) => {
+                                const deltaX = ((moveE.clientX - startX) / rect.width) * 100;
+                                const deltaY = ((moveE.clientY - startY) / rect.height) * 100;
+                                const nextImages = [...editingPack.images];
+                                const nextOverlays = [...(nextImages[editorIdx].overlays || [])];
+                                nextOverlays[idx] = {
+                                  ...nextOverlays[idx],
+                                  x: Math.max(0, Math.min(100, startPosX + deltaX)),
+                                  y: Math.max(0, Math.min(100, startPosY + deltaY))
+                                };
+                                nextImages[editorIdx].overlays = nextOverlays;
+                                setEditingPack(prev => ({ ...prev, images: nextImages }));
+                              };
+                              const onMouseUp = () => {
+                                window.removeEventListener("mousemove", onMouseMove);
+                                window.removeEventListener("mouseup", onMouseUp);
+                              };
+                              window.addEventListener("mousemove", onMouseMove);
+                              window.addEventListener("mouseup", onMouseUp);
+                            }}
+                          >
                             <div style={{ display: 'grid' }}>
                               {isSolid && (
                                 <div style={{ gridArea: '1 / 1', zIndex: 0 }}>
-                                  <span className={styles.textInner} style={{
-                                    color: 'transparent',
-                                    backgroundColor: bgColor,
-                                  }}>
+                                  <span className={styles.textInner} style={{ color: 'transparent', backgroundColor: bgColor }}>
                                     {ov.text}
                                   </span>
                                 </div>
@@ -825,140 +1145,34 @@ export default function Home() {
                           </div>
                         );
                       })}
+                    </>
+                  ) : (
+                    <div className={styles.emptyCanvas}>
+                      <p>No image selected.</p>
                     </div>
-                  </div>
+                  )}
                 </div>
-                  <div className={styles.savedCardActions}>
-                    <button className={styles.savedActionBtn} onClick={() => handleDownloadTrigger(post)}>↓</button>
-                    <button className={styles.savedActionBtn} style={{ background: "rgba(239, 68, 68, 0.6)" }} onClick={() => handleRemoveSaved(post.id)}>✕</button>
-                  </div>
-                  <div className={styles.savedCardInfo}>
-                    <div className={styles.savedCardCaption}>{post.caption}</div>
-                    <button 
-                      className={styles.savedEditBtn}
-                      onClick={() => setEditingPost(post)}
-                    >
-                      ✎ Edit Overlays
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* ═══ EDITOR MODAL ═══ */}
-      {editingPost && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modalContent}>
-            <div className={styles.editorPreview}>
-              {/* Forced 540x960 logical surface, scaled down to fit viewport */}
-              <div style={{ transform: 'scale(0.5)', transformOrigin: 'center' }}>
-                <div className={styles.canvasWrapper} style={{ width: '540px', height: '960px', flex: 'none' }}>
-                <img src={editingPost.image} alt="Editing" />
-                {editingPost.overlays.map((ov, idx) => {
-                  const isSolid = ov.bgMode === 'solid';
-                  const isOutline = ov.bgMode === 'outline';
-                  
-                  const selectedColor = ov.color || "#ffffff";
-                  const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
-
-                  const bgColor = isSolid ? selectedColor : 'transparent';
-                  const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
-
-                  const outlineColor = isLight ? '#000000' : '#ffffff';
-                  const outlineShadow = isOutline ? `
-                    1px 1px 0 ${outlineColor}, -1px -1px 0 ${outlineColor}, 
-                    1px -1px 0 ${outlineColor}, -1px 1px 0 ${outlineColor},
-                    0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
-                    1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor},
-                    2px 2px 2px rgba(0,0,0,0.3)
-                  ` : '';
-
-                  return (
-                    <div 
-                      key={idx}
-                      className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`}
-                      style={{
-                        left: `${ov.x}%`,
-                        top: `${ov.y}%`,
-                        transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
-                        fontSize: `${ov.fontSize || 24}px`
-                      }}
-                      onMouseDown={(e) => {
-                        const startX = e.clientX;
-                        const startY = e.clientY;
-                        const startPosX = ov.x;
-                        const startPosY = ov.y;
-                        const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                        
-                        const onMouseMove = (moveE) => {
-                          const deltaX = ((moveE.clientX - startX) / rect.width) * 100;
-                          const deltaY = ((moveE.clientY - startY) / rect.height) * 100;
-                          const nextOverlays = [...editingPost.overlays];
-                          nextOverlays[idx] = {
-                            ...nextOverlays[idx],
-                            x: Math.max(0, Math.min(100, startPosX + deltaX)),
-                            y: Math.max(0, Math.min(100, startPosY + deltaY))
-                          };
-                          setEditingPost(prev => ({ ...prev, overlays: nextOverlays }));
-                        };
-                        
-                        const onMouseUp = () => {
-                          window.removeEventListener("mousemove", onMouseMove);
-                          window.removeEventListener("mouseup", onMouseUp);
-                        };
-                        
-                        window.addEventListener("mousemove", onMouseMove);
-                        window.addEventListener("mouseup", onMouseUp);
-                      }}
-                    >
-                      <div style={{ display: 'grid' }}>
-                        {isSolid && (
-                          <div style={{ gridArea: '1 / 1', zIndex: 0 }}>
-                            <span className={styles.textInner} style={{
-                              color: 'transparent',
-                              backgroundColor: bgColor,
-                            }}>
-                              {ov.text}
-                            </span>
-                          </div>
-                        )}
-                        <div style={{ gridArea: '1 / 1', zIndex: 1 }}>
-                          <span className={styles.textInner} style={{
-                            color: textColor || "white",
-                            backgroundColor: "transparent",
-                            textShadow: isOutline ? outlineShadow : undefined,
-                          }}>
-                            {ov.text}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             </div>
-          </div>
-            
+
             <div className={styles.editorSidebar}>
-              <div className={styles.editorSectionTitle}>Text Layers</div>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {editingPost.overlays.map((ov, idx) => (
+              <div className={styles.sidebarSection}>
+                <div className={styles.sectionTitle}>Slide #{editorIdx + 1} Overlays</div>
+                
+                {editingPack.images[editorIdx]?.overlays?.map((ov, idx) => (
                   <div key={idx} className={styles.overlayItem}>
                     <button className={styles.removeOverlay} onClick={() => {
-                      const next = editingPost.overlays.filter((_, i) => i !== idx);
-                      setEditingPost(prev => ({ ...prev, overlays: next }));
+                      const nextImages = [...editingPack.images];
+                      nextImages[editorIdx].overlays = nextImages[editorIdx].overlays.filter((_, i) => i !== idx);
+                      setEditingPack(prev => ({ ...prev, images: nextImages }));
                     }}>✕</button>
                     <textarea 
                       className={styles.overlayTextarea}
                       value={ov.text}
                       onChange={(e) => {
-                        const next = [...editingPost.overlays];
-                        next[idx].text = e.target.value;
-                        setEditingPost(prev => ({ ...prev, overlays: next }));
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx].overlays[idx].text = e.target.value;
+                        setEditingPack(prev => ({ ...prev, images: nextImages }));
                       }}
                       placeholder="Type something..."
                     />
@@ -969,9 +1183,9 @@ export default function Home() {
                           key={f}
                           className={`${styles.styleBtn} ${ov.font === f || (!ov.font && f === 'classic') ? styles.styleBtnActive : ''}`}
                           onClick={() => {
-                            const next = [...editingPost.overlays];
-                            next[idx].font = f;
-                            setEditingPost(prev => ({ ...prev, overlays: next }));
+                            const nextImages = [...editingPack.images];
+                            nextImages[editorIdx].overlays[idx].font = f;
+                            setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
                         >
                           {f.toUpperCase()}
@@ -985,9 +1199,9 @@ export default function Home() {
                           key={a}
                           className={`${styles.alignBtn} ${ov.align === a || (!ov.align && a === 'center') ? styles.alignBtnActive : ''}`}
                           onClick={() => {
-                            const next = [...editingPost.overlays];
-                            next[idx].align = a;
-                            setEditingPost(prev => ({ ...prev, overlays: next }));
+                            const nextImages = [...editingPack.images];
+                            nextImages[editorIdx].overlays[idx].align = a;
+                            setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
                         >
                           {a === 'left' && (
@@ -1021,9 +1235,9 @@ export default function Home() {
                           key={b}
                           className={`${styles.styleBtn} ${ov.bgMode === b || (!ov.bgMode && b === 'none') ? styles.styleBtnActive : ''}`}
                           onClick={() => {
-                            const next = [...editingPost.overlays];
-                            next[idx].bgMode = b;
-                            setEditingPost(prev => ({ ...prev, overlays: next }));
+                            const nextImages = [...editingPack.images];
+                            nextImages[editorIdx].overlays[idx].bgMode = b;
+                            setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
                         >
                           {b === 'none' ? 'NO BG' : b.toUpperCase()}
@@ -1031,114 +1245,73 @@ export default function Home() {
                       ))}
                     </div>
 
-                    <div className={styles.overlayControls}>
-                      <div className={styles.controlGroup}>
-                        <label>Size</label>
+                    <div className={styles.rangeRow}>
+                      <div className={styles.rangeItem}>
+                        <div className={styles.rangeLabel}>Scale</div>
                         <input 
-                          type="range" 
-                          min="15"
-                          max="120"
-                          value={ov.size || 30} 
+                          type="range" min="10" max="100" step="1"
+                          value={ov.size || 30}
                           onChange={(e) => {
-                            const next = [...editingPost.overlays];
-                            next[idx].size = parseInt(e.target.value);
-                            setEditingPost(prev => ({ ...prev, overlays: next }));
+                            const nextImages = [...editingPack.images];
+                            nextImages[editorIdx].overlays[idx].size = parseInt(e.target.value);
+                            setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
                         />
                       </div>
-                      <div className={styles.controlGroup}>
-                        <label>Reflow</label>
+                      <div className={styles.rangeItem}>
+                        <div className={styles.rangeLabel}>Font Size</div>
                         <input 
-                          type="range" 
-                          min="12"
-                          max="48"
-                          value={ov.fontSize || 24} 
+                          type="range" min="12" max="100" step="1"
+                          value={ov.fontSize || 24}
                           onChange={(e) => {
-                            const next = [...editingPost.overlays];
-                            next[idx].fontSize = parseInt(e.target.value);
-                            setEditingPost(prev => ({ ...prev, overlays: next }));
+                            const nextImages = [...editingPack.images];
+                            nextImages[editorIdx].overlays[idx].fontSize = parseInt(e.target.value);
+                            setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
                         />
                       </div>
-                      <div className={styles.controlGroup} style={{ gridColumn: 'span 2' }}>
-                        <label>Color</label>
-                        <div className={styles.colorGrid}>
-                          {["#ffffff", "#000000", "#ff4d4d", "#ff80df", "#a64dff", "#4d79ff", "#4dffff", "#4dff88", "#ffff4d", "#ffad33"].map(c => (
-                            <div 
-                              key={c}
-                              className={`${styles.colorSwatch} ${ov.color === c ? styles.colorSwatchActive : ''}`}
-                              style={{ backgroundColor: c }}
-                              onClick={() => {
-                                const next = [...editingPost.overlays];
-                                next[idx].color = c;
-                                setEditingPost(prev => ({ ...prev, overlays: next }));
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div className={styles.controlGroup}>
-                        <label>Rotation</label>
-                        <input 
-                          type="range" 
-                          min="-180"
-                          max="180"
-                          value={ov.rotation || 0} 
-                          onChange={(e) => {
-                            const next = [...editingPost.overlays];
-                            next[idx].rotation = parseInt(e.target.value);
-                            setEditingPost(prev => ({ ...prev, overlays: next }));
+                    </div>
+
+                    <div className={styles.colorStrip}>
+                      {["#ffffff", "#000000", "#ff3b5c", "#face15", "#2af0ea", "#00f2ea", "#ff0050"].map(c => (
+                        <div 
+                          key={c}
+                          className={ov.color === c ? styles.colorCircleActive : styles.colorCircle}
+                          style={{ backgroundColor: c }}
+                          onClick={() => {
+                            const nextImages = [...editingPack.images];
+                            nextImages[editorIdx].overlays[idx].color = c;
+                            setEditingPack(prev => ({ ...prev, images: nextImages }));
                           }}
                         />
-                      </div>
+                      ))}
                     </div>
                   </div>
                 ))}
                 
                 <button className={styles.addTextBtn} onClick={() => {
-                  setEditingPost(prev => ({
-                    ...prev,
-                    overlays: [...prev.overlays, { text: "TAP TO EDIT", x: 50, y: 50, size: 30, color: "#ffffff", font: 'classic', bgMode: 'none', align: 'center', rotation: 0, letterSpacing: 0 }]
-                  }));
+                  const nextImages = [...editingPack.images];
+                  const currentImg = nextImages[editorIdx];
+                  if (!currentImg) {
+                    alert("Please add an image first!");
+                    return;
+                  }
+                  currentImg.overlays = [...(currentImg.overlays || []), { 
+                    text: "NEW TEXT", x: 50, y: 50, size: 30, color: "#ffffff", 
+                    font: 'classic', bgMode: 'none', align: 'center', rotation: 0 
+                  }];
+                  setEditingPack({...editingPack, images: nextImages});
                 }}>
                   <span style={{ fontSize: '18px' }}>＋</span> Add Text Layer
                 </button>
               </div>
-              
-              <div className={styles.editorActions}>
-                <button className={styles.cancelActionBtn} onClick={() => setEditingPost(null)}>Cancel</button>
-                <button className={styles.saveActionBtn} onClick={() => {
-                  handleUpdateOverlays(editingPost.id, editingPost.overlays);
-                  setEditingPost(null);
-                }}>Save Overlays</button>
-              </div>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Empty State */}
-      {!result && !generating && view === "generator" && (
-        <div className={styles.emptyState}>
-          <div className={styles.emptyIcon}>{currentMode?.icon || "📸"}</div>
-          <div className={styles.emptyTitle}>
-            {mode === "photodump" && "Photo dump studio"}
-            {mode === "carousel" && "Post carousel studio"}
-            {mode === "ad" && "Ad creative studio"}
-          </div>
-          <div className={styles.emptyDesc}>
-            {mode === "photodump" &&
-              "Describe a vibe — get 5 mixed-moment photos like a real Instagram photo dump."}
-            {mode === "carousel" &&
-              "Describe an occasion — get 5 cohesive photos that tell the story of that moment."}
-            {mode === "ad" &&
-              "Upload a product, describe the vibe — get 5 influencer-style ad photos."}
-          </div>
-        </div>
-      )}
-
-      {/* Past Carousels */}
-      {history.length > 0 && (
+      {/* Past Carousels (for generator only) */}
+      {view === "generator" && history.length > 0 && (
         <section className={styles.historySection}>
           <div className={styles.historyHeader}>
             <span className={styles.historyTitle}>Recent ({history.length})</span>
