@@ -127,6 +127,9 @@ export default function Home() {
   const [activeQuickTool, setActiveQuickTool] = useState('fonts'); // 'fonts' or 'colors'
   const [isMobile, setIsMobile] = useState(false);
   const quickEditRef = useRef(null);
+  const canvasContainerRef = useRef(null);
+  const [canvasDisplayWidth, setCanvasDisplayWidth] = useState(0);
+  const mobileAddInputRef = useRef(null); // hidden file input for mobile toolbar Add button
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 1024);
@@ -137,17 +140,51 @@ export default function Home() {
 
   useEffect(() => {
     if (isQuickEditing && quickEditRef.current) {
-      setTimeout(() => {
-        quickEditRef.current.focus();
-      }, 100);
       document.body.classList.add(styles.fixedBody);
+      // Seed the contentEditable with current text and move cursor to end
+      const el = quickEditRef.current;
+      setTimeout(() => {
+        if (!el) return;
+        const text = editingPack?.images[editorIdx]?.overlays[activeOverlayIdx]?.text || '';
+        // Only set if empty or different (avoids cursor jump on re-renders)
+        if (el.innerText !== text) {
+          el.innerText = text;
+        }
+        el.focus();
+        // Move cursor to end
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }, 50);
     } else {
       document.body.classList.remove(styles.fixedBody);
     }
-    return () => {
-      document.body.classList.remove(styles.fixedBody);
-    };
+    return () => { document.body.classList.remove(styles.fixedBody); };
   }, [isQuickEditing]);
+
+  // Live-track the canvas container width so the immersive text preview
+  // always wraps at the exact same breakpoints as the real overlay.
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        // contentBoxSize gives the inner size (excluding border)
+        const w = entry.contentBoxSize
+          ? entry.contentBoxSize[0]?.inlineSize
+          : entry.contentRect.width;
+        if (w > 0) setCanvasDisplayWidth(w);
+      }
+    });
+    observer.observe(el);
+    // seed immediately in case ResizeObserver fires late
+    setCanvasDisplayWidth(el.offsetWidth);
+    return () => observer.disconnect();
+  }, [canvasContainerRef.current]);
+
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
 
@@ -570,16 +607,22 @@ export default function Home() {
     });
   }, []);
 
+  // Generator mode "Download All" — routes images through the same
+  // batch export queue used by the editor so iOS Safari can capture them.
+  // Direct <a>.click() in a loop is blocked on iOS.
   const handleDownloadAll = useCallback(() => {
     if (!result?.images) return;
-    result.images.forEach((item, i) => {
-      setTimeout(() => {
-        const a = document.createElement("a");
-        a.href = item.image;
-        a.download = `ugcfactory_carousel_${i + 1}.png`;
-        a.click();
-      }, i * 300);
-    });
+    // If images have no overlays (generator output) we can direct-download.
+    // Use the export queue so each is processed via toPng (works on iOS).
+    const allAsExportItems = result.images.map(img => ({
+      image: img.image,
+      overlays: [],  // generator images have no text overlays
+      aspectRatio: result.aspectRatio || '9:16',
+      offsetX: 50,
+      offsetY: 50,
+      zoom: 1,
+    }));
+    setExportQueue(allAsExportItems);
   }, [result]);
 
   // ──── Keyboard shortcut ────
@@ -1254,7 +1297,7 @@ export default function Home() {
                   justifyContent: 'center'
                 }}
               >
-                <div className={styles.canvasWrapperContainer}>
+                <div className={styles.canvasWrapperContainer} ref={canvasContainerRef}>
                   {editingPack.images[editorIdx] ? (
                     <>
                       {isCropping ? (
@@ -1329,7 +1372,8 @@ export default function Home() {
                                   fontSize: `${fontCqw}cqw`,
                                   touchAction: 'none',
                                   pointerEvents: 'auto',
-                                  opacity: 1
+                                  opacity: 1,
+                                  willChange: 'transform', // GPU layer prevents reflow on drag
                                 }}
                                 onPointerDown={(e) => {
                               const startX = e.clientX;
@@ -1420,6 +1464,26 @@ export default function Home() {
 
             {/* Permanent Mobile Bottom Toolbar */}
             <div className={styles.mobileToolbarContainer}>
+              {/* Hidden file input for the Add Image button */}
+              <input
+                ref={mobileAddInputRef}
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const newImg = { image: reader.result, overlays: [] };
+                    const nextPack = {...editingPack, images: [...editingPack.images, newImg]};
+                    commitToHistory(nextPack);
+                    setEditorIdx(nextPack.images.length - 1);
+                    e.target.value = '';
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
               {!isCropping ? (
                 <div className={styles.mobileToolbarContent}>
                   <button className={styles.actionIconBtn} onClick={() => {
@@ -1433,18 +1497,17 @@ export default function Home() {
                     setActiveOverlayIdx(currentImg.overlays.length - 1);
                     setIsQuickEditing(true);
                   }}>
-                    <Icon name="Plus" size={20} />
+                    <Icon name="Type" size={20} color="#fbbf24" />
                     <span>Text</span>
                   </button>
                   <button className={styles.actionIconBtn} onClick={() => setIsCropping(true)}>
                     <Icon name="Crop" size={20} color="#60a5fa" />
                     <span>Crop</span>
                   </button>
-                  <button className={styles.actionIconBtn} onClick={() => {
-                    setEditorIdx(prev => (prev + 1) % editingPack.images.length);
-                  }}>
-                    <Icon name="ChevronRight" size={20} color="#a1a1aa" />
-                    <span>Next</span>
+                  {/* Add Image — replaces Next (nav arrows handle slide navigation) */}
+                  <button className={styles.actionIconBtn} onClick={() => mobileAddInputRef.current?.click()}>
+                    <Icon name="ImagePlus" size={20} color="#34d399" />
+                    <span>Add</span>
                   </button>
                 </div>
               ) : (
@@ -1493,7 +1556,7 @@ export default function Home() {
                       setZoom(1);
                       setIsCropping(true);
                     }}>
-                      <Icon name="Crop" size={14} style={{ marginRight: '6px' }} color="#60a5fa" /> Edit Crop & Pan
+                      <Icon name="Crop" size={14} style={{ marginRight: '6px' }} color="#000000" /> Edit Crop & Pan
                     </button>
                   </div>
                   <div className={styles.sidebarSection}>
@@ -1737,15 +1800,14 @@ export default function Home() {
 
       {exportingPost && (
         <div style={{ 
-          position: 'absolute', 
+          position: 'fixed', 
           top: 0, 
-          left: 0, 
-          width: '100%',
-          height: '100%',
+          left: '-110vw',   // off-screen left: fully outside viewport, not clipped
+          width: '1080px',
           pointerEvents: 'none', 
-          zIndex: -1,
-          opacity: 0.001,
-          overflow: 'hidden'
+          zIndex: 9999,      // high z-index so nothing occludes it
+          opacity: 1,        // must be visible for iOS Safari canvas capture
+          overflow: 'visible'
         }}>
           <div id="export-surface" ref={exportRef} style={{ 
             width: '1080px', 
@@ -1757,6 +1819,7 @@ export default function Home() {
           }}>
             <img 
               src={exportingPost.image} 
+              crossOrigin="anonymous"
               alt="Exporting" 
               style={{ 
                 width: '100%', 
@@ -1944,107 +2007,146 @@ export default function Home() {
             }}>Done</button>
           </div>
 
-          <div className={styles.quickEditMain}>
-            {/* Left Slider: Font Size (Flow) */}
-            <div className={styles.quickFontSizeSliderContainer}>
-              <div className={styles.sliderLabel}>FONT</div>
-              <input 
-                className={styles.quickFontSizeSlider}
-                type="range"
-                min="12"
-                max="100"
-                value={editingPack.images[editorIdx].overlays[activeOverlayIdx]?.fontSize || 24}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value);
-                  const nextImages = [...editingPack.images];
-                  nextImages[editorIdx].overlays[activeOverlayIdx].fontSize = val;
-                  setEditingPack(prev => ({ ...prev, images: nextImages }));
-                }}
-              />
+            <div className={styles.quickEditMain}>
+            {/* Full-width text editing area — no side sliders blocking it */}
+            <div className={styles.quickEditInputArea}>
+              {(() => {
+                const ov = editingPack.images[editorIdx].overlays[activeOverlayIdx];
+                const scaleRatio = (ov?.size || 30) / 30;
+
+                // ── Consistent wrap logic ──
+                // The canvas uses: fontSize in cqw = (ov.fontSize / 540) * 100
+                // So canvas char width = (fontSize / 540) * canvasW
+                // Canvas max-width = canvasW * 0.8
+                //
+                // We want the editor to wrap at the exact same character positions.
+                // Solution: compute font-size and max-width using the same cqw math,
+                // then scale both up by a displayScale so they fill the available
+                // editor width (minus padding). Scaling both proportionally means
+                // line-break points stay identical.
+                const canvasW = canvasDisplayWidth > 0
+                  ? canvasDisplayWidth
+                  : (canvasContainerRef.current?.offsetWidth || 280);
+                const canvasMaxW = canvasW * 0.8;            // canvas text wrap width
+                const editorAvailW = window.innerWidth - 40; // editor width - padding
+                // Upscale factor: how much bigger the editor preview is vs the canvas
+                const displayScale = Math.min(editorAvailW / canvasMaxW, 3.5);
+                const canvasFontPx = ((ov?.fontSize || 24) / 540) * canvasW;
+                const displayFontPx = canvasFontPx * displayScale;
+                const displayMaxW = canvasMaxW * displayScale;
+
+                const isSolid = ov?.bgMode === 'solid';
+                const isOutline = ov?.bgMode === 'outline';
+                const selectedColor = ov?.color || '#ffffff';
+                const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
+                const bg = isSolid ? selectedColor : 'transparent';
+                const fg = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
+                const shadow = isOutline
+                  ? `1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,0 1px 0 #000,0 -1px 0 #000`
+                  : 'none';
+                return (
+                  <div
+                    ref={quickEditRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className={`${styles.quickEditTextarea} ${styles['overlay_' + (ov?.font || 'classic')]}`}
+                    onInput={(e) => {
+                      const text = e.currentTarget.innerText;
+                      const nextImages = [...editingPack.images];
+                      nextImages[editorIdx].overlays[activeOverlayIdx].text = text;
+                      setEditingPack(prev => ({ ...prev, images: nextImages }));
+                    }}
+                    style={{
+                      fontSize: `${displayFontPx}px`,       // upscaled canvas font
+                      maxWidth: `${displayMaxW}px`,          // upscaled canvas wrap width → same line breaks
+                      transform: `scale(${scaleRatio})`,
+                      transformOrigin: 'center center',
+                      textAlign: ov?.align || 'center',
+                      background: bg,
+                      color: fg,
+                      textShadow: shadow,
+                      padding: '0.18em 0.45em',
+                      borderRadius: '0.25em',
+                      lineHeight: 1.2,
+                    }}
+                  />
+                );
+              })()}
             </div>
 
-            {/* Right Slider: Scale (Size) */}
-            <div className={styles.quickScaleSliderContainer}>
-              <div className={styles.sliderLabel}>SCALE</div>
-              <input 
-                className={styles.quickFontSizeSlider} /* reuse same vertical style */
-                type="range"
-                min="10"
-                max="100"
-                value={editingPack.images[editorIdx].overlays[activeOverlayIdx]?.size || 30}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value);
-                  const nextImages = [...editingPack.images];
-                  nextImages[editorIdx].overlays[activeOverlayIdx].size = val;
-                  setEditingPack(prev => ({ ...prev, images: nextImages }));
-                }}
-              />
-            </div>
-
-            <div className={styles.quickEditInputArea} onClick={() => quickEditRef.current?.focus()}>
-              <textarea
-                ref={quickEditRef}
-                className={`${styles.quickEditTextarea} ${styles['overlay_' + (editingPack.images[editorIdx].overlays[activeOverlayIdx].font || 'classic')]}`}
-                value={editingPack.images[editorIdx].overlays[activeOverlayIdx].text}
-                onChange={(e) => {
-                  const nextImages = [...editingPack.images];
-                  nextImages[editorIdx].overlays[activeOverlayIdx].text = e.target.value;
-                  setEditingPack(prev => ({ ...prev, images: nextImages }));
-                }}
-                style={{
-                  width: 'fit-content',
-                  margin: '0 auto',
-                  textAlign: editingPack.images[editorIdx].overlays[activeOverlayIdx]?.align || 'center',
-                  background: editingPack.images[editorIdx].overlays[activeOverlayIdx]?.bgMode === 'solid' ? (editingPack.images[editorIdx].overlays[activeOverlayIdx]?.color || '#ffffff') : 'transparent',
-                  color: editingPack.images[editorIdx].overlays[activeOverlayIdx]?.bgMode === 'solid' 
-                    ? (parseInt((editingPack.images[editorIdx].overlays[activeOverlayIdx]?.color || "#ffffff").replace('#',''), 16) > 0xffffff / 2 ? '#000000' : '#ffffff')
-                    : (editingPack.images[editorIdx].overlays[activeOverlayIdx]?.color || '#ffffff'),
-                  textShadow: editingPack.images[editorIdx].overlays[activeOverlayIdx]?.bgMode === 'outline' 
-                    ? `1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 1px 0 #000, 0px -1px 0 #000, 1px 0px 0 #000, -1px 0px 0 #000`
-                    : 'none',
-                  padding: '12px 24px',
-                  borderRadius: '16px',
-                  fontSize: `${editingPack.images[editorIdx].overlays[activeOverlayIdx]?.fontSize || 24}px`,
-                  transform: `scale(${(editingPack.images[editorIdx].overlays[activeOverlayIdx]?.size || 30) / 30})`,
-                  transformOrigin: 'center',
-                  minHeight: '1.2em'
-                }}
-              />
-            </div>
-
-            <div className={styles.editOverlayControls}>
-              {activeQuickTool === 'colors' ? (
-                <div className={styles.quickColorStrip}>
-                  {["#ffffff", "#000000", "#ff3b5c", "#face15", "#2af0ea", "#00f2ea", "#ff0050"].map(c => (
-                    <div 
-                      key={c}
-                      className={editingPack.images[editorIdx].overlays[activeOverlayIdx].color === c ? styles.colorCircleActive : styles.colorCircle}
-                      style={{ backgroundColor: c, width: '36px', height: '36px', flexShrink: 0 }}
-                      onClick={() => {
-                        const nextImages = [...editingPack.images];
-                        nextImages[editorIdx].overlays[activeOverlayIdx].color = c;
-                        setEditingPack(prev => ({ ...prev, images: nextImages }));
-                      }}
-                    />
-                  ))}
+            {/* Bottom controls: sliders + font/color strip */}
+            <div className={styles.quickEditBottomBar}>
+              {/* Horizontal slider row */}
+              <div className={styles.quickSliderRow}>
+                <div className={styles.quickSliderItem}>
+                  <span className={styles.sliderLabel}>FONT</span>
+                  <input
+                    className={styles.quickHSlider}
+                    type="range"
+                    min="12"
+                    max="100"
+                    value={editingPack.images[editorIdx].overlays[activeOverlayIdx]?.fontSize || 24}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      const nextImages = [...editingPack.images];
+                      nextImages[editorIdx].overlays[activeOverlayIdx].fontSize = val;
+                      setEditingPack(prev => ({ ...prev, images: nextImages }));
+                    }}
+                  />
                 </div>
-              ) : (
-                <div className={styles.fontSelectorStrip}>
-                  {['classic', 'typewriter', 'serif', 'handwriting', 'neon'].map(f => (
-                    <button 
-                      key={f}
-                      className={`${styles.fontPill} ${editingPack.images[editorIdx].overlays[activeOverlayIdx].font === f ? styles.fontPillActive : ''}`}
-                      onClick={() => {
-                        const nextImages = [...editingPack.images];
-                        nextImages[editorIdx].overlays[activeOverlayIdx].font = f;
-                        setEditingPack(prev => ({ ...prev, images: nextImages }));
-                      }}
-                    >
-                      {f.toUpperCase()}
-                    </button>
-                  ))}
+                <div className={styles.quickSliderItem}>
+                  <span className={styles.sliderLabel}>SCALE</span>
+                  <input
+                    className={styles.quickHSlider}
+                    type="range"
+                    min="10"
+                    max="100"
+                    value={editingPack.images[editorIdx].overlays[activeOverlayIdx]?.size || 30}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      const nextImages = [...editingPack.images];
+                      nextImages[editorIdx].overlays[activeOverlayIdx].size = val;
+                      setEditingPack(prev => ({ ...prev, images: nextImages }));
+                    }}
+                  />
                 </div>
-              )}
+              </div>
+
+              {/* Font / Color strip */}
+              <div className={styles.editOverlayControls}>
+                {activeQuickTool === 'colors' ? (
+                  <div className={styles.quickColorStrip}>
+                    {["#ffffff", "#000000", "#ff3b5c", "#face15", "#2af0ea", "#00f2ea", "#ff0050"].map(c => (
+                      <div 
+                        key={c}
+                        className={editingPack.images[editorIdx].overlays[activeOverlayIdx].color === c ? styles.colorCircleActive : styles.colorCircle}
+                        style={{ backgroundColor: c, width: '36px', height: '36px', flexShrink: 0 }}
+                        onClick={() => {
+                          const nextImages = [...editingPack.images];
+                          nextImages[editorIdx].overlays[activeOverlayIdx].color = c;
+                          setEditingPack(prev => ({ ...prev, images: nextImages }));
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className={styles.fontSelectorStrip}>
+                    {['classic', 'typewriter', 'serif', 'handwriting', 'neon'].map(f => (
+                      <button 
+                        key={f}
+                        className={`${styles.fontPill} ${editingPack.images[editorIdx].overlays[activeOverlayIdx].font === f ? styles.fontPillActive : ''}`}
+                        onClick={() => {
+                          const nextImages = [...editingPack.images];
+                          nextImages[editorIdx].overlays[activeOverlayIdx].font = f;
+                          setEditingPack(prev => ({ ...prev, images: nextImages }));
+                        }}
+                      >
+                        {f.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
