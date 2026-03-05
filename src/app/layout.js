@@ -25,6 +25,13 @@ export const metadata = {
     "Generate scroll-stopping Facebook & Instagram ad creative with AI. UGC selfies, product hero shots, lifestyle scenes — at $0.04 per image.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

@@ -133,12 +133,22 @@ export default function Home() {
   const canvasContainerRef = useRef(null);
   const [canvasDisplayWidth, setCanvasDisplayWidth] = useState(0);
   const mobileAddInputRef = useRef(null); // hidden file input for mobile toolbar Add button
+  const [dragLock, setDragLock] = useState({ idx: null, width: null }); // Locks width during drag to prevent reflow
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+
+    const preventPinch = (e) => {
+      if (e.touches.length > 1) e.preventDefault();
+    };
+    document.addEventListener('touchstart', preventPinch, { passive: false });
+
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      document.removeEventListener('touchstart', preventPinch);
+    };
   }, []);
 
   useEffect(() => {
@@ -164,6 +174,13 @@ export default function Home() {
       }, 50);
     } else {
       document.body.classList.remove(styles.fixedBody);
+      // Reset Safari/Chrome iOS scroll/zoom bug when closing keyboard or editor
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        // Double down for older browsers
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      }
     }
     return () => { document.body.classList.remove(styles.fixedBody); };
   }, [isQuickEditing]);
@@ -1390,26 +1407,31 @@ export default function Home() {
                                   pointerEvents: 'auto',
                                   opacity: 1,
                                   willChange: 'transform', // GPU layer prevents reflow on drag
+                                  width: dragLock.idx === hideIdx ? `${dragLock.width}px` : undefined,
+                                  maxWidth: dragLock.idx === hideIdx ? 'none' : undefined,
+                                  whiteSpace: 'pre-wrap', 
                                 }}
-                                onPointerDown={(e) => {
-                                  const el = e.currentTarget;
-                                  const currentWidth = el.offsetWidth;
-                                  el.style.width = `${currentWidth}px`;
-                                  el.style.maxWidth = 'none';
+                                 onPointerDown={(e) => {
+                                   const el = e.currentTarget;
+                                   const selfRect = el.getBoundingClientRect();
+                                   // Use BCR / scale to get exact sub-pixel layout width
+                                   const scale = (ov.size || 30) / 30;
+                                   const widthPx = selfRect.width / (scale || 1);
+                                   setDragLock({ idx: hideIdx, width: widthPx });
 
-                                  const startX = e.clientX;
-                              const startY = e.clientY;
-                              const startPosX = ov.x;
-                              const startPosY = ov.y;
-                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                              
-                              let latestPack = editingPack;
-                              let hasMoved = false;
-                              
-                              const onPointerMove = (moveE) => {
-                                moveE.preventDefault();
-                                const deltaX = ((moveE.clientX - startX) / rect.width) * 100;
-                                const deltaY = ((moveE.clientY - startY) / rect.height) * 100;
+                                   const startX = e.clientX;
+                                   const startY = e.clientY;
+                                   const startPosX = ov.x;
+                                   const startPosY = ov.y;
+                                   const parentRect = el.parentElement.getBoundingClientRect();
+                                   
+                                   let latestPack = editingPack;
+                                   let hasMoved = false;
+                                   
+                                   const onPointerMove = (moveE) => {
+                                     moveE.preventDefault();
+                                     const deltaX = ((moveE.clientX - startX) / parentRect.width) * 100;
+                                     const deltaY = ((moveE.clientY - startY) / parentRect.height) * 100;
                                 
                                 if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
                                   hasMoved = true;
@@ -1429,9 +1451,7 @@ export default function Home() {
                                 }
                               };
                               const onPointerUp = () => {
-                                // Unlock width
-                                el.style.width = '';
-                                el.style.maxWidth = '';
+                                setDragLock({ idx: null, width: null });
 
                                 window.removeEventListener("pointermove", onPointerMove);
                                 window.removeEventListener("pointerup", onPointerUp);
