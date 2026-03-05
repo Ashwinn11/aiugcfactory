@@ -110,7 +110,7 @@ Output a JSON object with:
 ${mode === "post" ? `- "styling": { "outfit": "...", "hair": "..." } (shared across all scenes)` : ""}
 - "scenes": An array of exactly ${slideCount} scene objects, each with:
   - "scene_prompt": An object describing what happens:
-    - "action": What the person is doing in this scene. Be specific and visual. Even for product/food/room shots, include the person's hand or arm in frame (e.g., "hand reaching for the plate", "fingers holding a fork"). UGC always has human presence.
+    - "action": What the person is doing in this scene. Be specific and visual. Do NOT describe camera angles, shot types, or perspective here. Only describe WHAT is happening. Even for product/food/room shots, include the person's hand or arm in frame (e.g., "hand reaching for the plate"). UGC always has human presence.
     - "expression": Facial expression. Empty string if face not in scene.
     - "environment": Specific setting with detail.
     - "key_item": Main product/object in frame. Empty string if none.
@@ -133,11 +133,12 @@ Think about HOW a real person would film this on their phone:
 - Showing themselves in a mirror? → mirror reflection with phone visible
 - Showing a room/space? → wide angle, but include a hand or arm at the edge of frame
 
+IGNORE any camera/shot language already present in the action field. Make your own decision.
 UGC ALWAYS has human presence. Even when requires_avatar is false (no face), include the person's hand, arm, or body in frame. Pure scene-only shots with zero human presence should be very rare.
 
 For each scene, add these fields to scene_prompt:
-- "angle": Natural description of how the camera captures this scene
-- "hands_visible": 1 (person holding phone to film, one hand free) or 2 (filmed by friend/timer, both hands free). Prefer at least 1 hand visible in EVERY scene.
+- "angle": Natural description of how the camera captures this scene. Do NOT mention "a friend" or "someone else" filming. Just describe the camera position (e.g., "Medium shot from a few feet away").
+- "hands_visible": 1 (person holding phone to film, one hand free) or 2 (phone on tripod/filmed by someone else, both hands free). Prefer at least 1 hand visible in EVERY scene.
 - "hand_action": What the visible hand(s) are doing.
 
 PHYSICAL RULES:
@@ -177,12 +178,12 @@ async function validateScenes(ai, scenes) {
 Each scene has a "scene_prompt" with: angle, expression, hands_visible, hand_action, environment, key_item.
 
 VALIDATION CHECKS:
-1. HANDS COUNT: If "hand_action" describes a two-handed action (opening, applying with both hands, holding two items) then "hands_visible" MUST be 2 and the "angle" must be from a distance (not selfie/mirror). Fix if wrong.
+1. HANDS COUNT: If "hand_action" describes a two-handed action (opening, applying with both hands, holding two items) then "hands_visible" MUST be 2 and the "angle" must be from a distance (not selfie/mirror holding phone). Fix if wrong.
 2. FACE vs ANGLE: If "angle" implies the person is behind the camera (looking down, first-person POV), then requires_avatar MUST be false and "expression" should be empty.
 3. FACE vs ANGLE: If "angle" shows the person's face (selfie, mirror, from a distance), then requires_avatar MUST be true.
 4. HANDS vs ANGLE: If "angle" implies holding the phone (selfie-style, close-up from below), then hands_visible MUST be 1 max.
-5. HANDS vs ANGLE: If "angle" implies shot by a friend/timer (from a distance, full body), hands_visible can be 0, 1, or 2.
-6. MIRROR RULE: If "environment" or "angle" mentions "mirror" or "reflection", the "angle" MUST describe a mirror selfie (e.g., "Reflected in a mirror, phone visible in one hand"). The person sees themselves through the mirror. hands_visible = 1 (phone in one hand).
+5. HANDS vs ANGLE: If "angle" implies shot from a distance (full body, medium shot), hands_visible can be 0, 1, or 2.
+6. MIRROR RULE: If "environment" or "angle" mentions "mirror" or "reflection", the "angle" MUST describe a mirror selfie. The person sees themselves through the mirror. If one hand holds the phone, hands_visible = 1. If BOTH hands are visible in the reflection while phone sits on a sink/tripod, hands_visible = 2. BUT if hands_visible = 1, they CANNOT do a two-handed action. Fix the action if it requires two hands but they are holding a phone.
 7. ANGLE DIVERSITY: Ensure at least 3 distinctly different angles across all scenes. Not all scenes should look the same.
 8. If anything contradicts, fix by adjusting either the angle OR the hand_action to make it physically possible. Prefer keeping the scene's creative intent.
 

@@ -557,7 +557,7 @@ export default function Home() {
         <div className={styles.logoArea}>
           <div className={styles.logoIcon}>🎬</div>
           <div className={styles.logoText}>
-            UGC <span>Factory</span>
+            AI UGC <span>Factory</span>
           </div>
         </div>
           <div className={styles.tabs}>

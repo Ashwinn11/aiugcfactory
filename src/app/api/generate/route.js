@@ -47,10 +47,18 @@ export async function POST(request) {
 
         // Build JSON-structured prompt for the image model
         const sp = scene.scene_prompt || {};
-        const outfit = sp.outfit || (styling && styling.outfit) || "";
+        const isPostMode = mode === "post";
+        const outfit = isPostMode ? (styling && styling.outfit) : sp.outfit;
         const hair = (styling && styling.hair) || "";
 
         const jsonPrompt = {};
+
+        // 1. Core Composition Rules
+        jsonPrompt.composition = {
+          people_count: scene.requires_avatar ? 1 : 0,
+          instruction: scene.requires_avatar ? "CRITICAL: There must be EXACTLY ONE person in this image. Do NOT add any other people, bystanders, or friends." : "Scene only. No faces visible.",
+          negative_constraints: "aggressively avoid: professional camera, DSLR, bokeh balls, anamorphic, cinema lighting, studio lighting, extra limbs, mutated anatomy, duplicate hands, two left hands, two right hands, wrong number of fingers, airbrushed, plastic skin, 3d render, cartoon, camera UI, shutter button, phone interface, screenshot, menu buttons, battery icons"
+        };
 
         if (scene.requires_avatar) {
           // Face visible: full subject + apparel
@@ -70,10 +78,20 @@ export async function POST(request) {
           };
         }
 
-        jsonPrompt.pose_and_action = {
-          camera_angle: sp.angle || "natural medium shot",
-          hands_visible: handsVisible,
-          hand_action: sp.hand_action || ""
+        // 2. Camera & Pose (synthesized natural language instead of raw integers)
+        let handInstruction = "";
+        if (handsVisible === 0) {
+          handInstruction = "No hands visible.";
+        } else if (handsVisible === 1) {
+          handInstruction = "ONLY one hand/arm is visible in the frame (the other is holding the camera or out of frame).";
+        } else {
+          handInstruction = "Both arms/hands are visible in the frame.";
+        }
+        
+        const actionText = sp.hand_action ? ` Action: ${sp.hand_action}` : "";
+
+        jsonPrompt.camera_and_pose = {
+          description: `${sp.angle || "natural medium shot"}. ${handInstruction}${actionText}`
         };
 
         jsonPrompt.environment = {
@@ -83,7 +101,6 @@ export async function POST(request) {
 
         // Clean up empty fields
         if (!jsonPrompt.environment.key_item) delete jsonPrompt.environment.key_item;
-        if (!jsonPrompt.pose_and_action.hand_action) delete jsonPrompt.pose_and_action.hand_action;
 
         const finalPrompt = `Generate a photo matching this description:\n${JSON.stringify(jsonPrompt, null, 2)}\n\n${photoPrompt}`;
         contents.push(finalPrompt);
@@ -111,8 +128,6 @@ export async function POST(request) {
           return {
             image: `data:${imagePart.inlineData.mimeType || "image/png"};base64,${imagePart.inlineData.data}`,
             caption: scene.caption || "",
-            scene_prompt: scene.prompt || "",
-            camera: scene.camera || "",
             timestamp: Date.now() + index,
           };
         } catch (err) {

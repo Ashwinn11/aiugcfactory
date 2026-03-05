@@ -14,10 +14,6 @@ You represent the optical characteristics and computational photography pipeline
     To achieve "ultra-realism," you must inject characteristics of unpolished reality: slight digital noise (not film grain), natural and authentic skin texture with visible pores/blemishes, and natural "snapshot" framing.
     CRITICAL: Aggressively avoid "glossy," "oily," "shiny," "glass skin," or "glazed" looks. Skin should have a strictly matte finish and feel real, with visible pores, natural blemishes, and uneven texture. Avoid the "high-end retouched" or "plastic" look. Slightly blown-out highlights are okay, but skin must remain unpolished and textured.
   </principle>
-
-  <principle name="Negative Constraints">
-    Ensure all generations aggressively avoid these traits: "professional camera, DSLR, bokeh balls, anamorphic, cinema lighting, studio lighting, extra limbs, mutated anatomy, duplicate hands, two left hands, two right hands, wrong number of fingers, airbrushed, plastic skin, 3d render, cartoon, camera UI, shutter button, phone interface, screenshot, menu buttons, battery icons".
-  </principle>
 </cognitive_framework>
 
 <visual_analysis_reference>
