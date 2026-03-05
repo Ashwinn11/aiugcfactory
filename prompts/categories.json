@@ -1,0 +1,167 @@
+{
+    "home": {
+        "name": "Home / Interior Design",
+        "slide_concept": "Same room, same angle, different interior styles",
+        "slide_structure": {
+            "1_hook": "Show the ugly/dated room — the relatable problem. Scene-only, no person needed.",
+            "2_problem": "Amplify the pain — close-up of clashing furniture, messy corner, outdated decor.",
+            "3_discovery": "Person discovers the app/product — opens it on their phone, first reaction.",
+            "4_transform_1": "Same room, first style transformation (e.g., Mid-century modern). 'Wait this actually looks good?'",
+            "5_transform_2": "Same room, second style transformation (e.g., Japandi). 'Okay I'm obsessed.'",
+            "6_cta": "Person smiling confidently. App name + link in bio energy."
+        },
+        "prompt_rules": {
+            "lock_across_all_slides": [
+                "room dimensions",
+                "camera angle/position",
+                "window and door positions",
+                "lighting direction"
+            ],
+            "change_per_slide": [
+                "interior style",
+                "wall colors/textures",
+                "furniture style",
+                "decor items"
+            ],
+            "style_options": [
+                "Mid-century modern",
+                "Scandinavian",
+                "Industrial luxe",
+                "Coastal",
+                "Japandi",
+                "Maximalist bohemian"
+            ]
+        },
+        "hook_formulas": [
+            "I showed my mum what AI thinks our [room] should look like",
+            "My landlord said I can't change anything so I showed her this",
+            "POV: You have good taste but no budget",
+            "IKEA budget, designer taste"
+        ]
+    },
+    "beauty": {
+        "name": "Beauty / Cosmetics",
+        "slide_concept": "Same face, same angle, progressive enhancement or problem-to-solution story",
+        "slide_structure": {
+            "1_hook": "The relatable skin/beauty problem. Person looking frustrated. Selfie or mirror selfie.",
+            "2_problem": "Amplify the struggle — failed attempts, cakey makeup, dull skin close-up.",
+            "3_discovery": "Person discovers the product — unboxing, holding it up, first impression.",
+            "4_transform_1": "Applying the product — first results visible. 'Wait this actually works?'",
+            "5_transform_2": "Full glow-up — radiant skin, confident expression. 'Okay I'm obsessed.'",
+            "6_cta": "Person smiling confidently, glowing skin. Product name + link in bio."
+        },
+        "prompt_rules": {
+            "lock_across_all_slides": [
+                "face shape",
+                "skin texture (pores, freckles)",
+                "lighting direction",
+                "background"
+            ],
+            "change_per_slide": [
+                "skin condition/glow",
+                "expression",
+                "makeup level",
+                "product presence"
+            ],
+            "preservation": "Face must be PIXEL-PERFECT identical across slides. NO skin smoothing. ONLY change the target feature."
+        },
+        "hook_formulas": [
+            "Everyone keeps asking if I got [treatment] done",
+            "I've always had [feature] and never known what [change] would look like",
+            "Stop wishing for better skin — I actually found something that works",
+            "My [person] got [treatment] and now I can't stop thinking about it"
+        ]
+    },
+    "fitness": {
+        "name": "Fitness / Body",
+        "slide_concept": "Same person, same pose, progressive transformation",
+        "slide_structure": {
+            "1_hook": "The relatable fitness frustration. Mirror selfie or gym photo showing 'before' state.",
+            "2_problem": "Amplify — failed diets, gym confusion, no progress despite effort.",
+            "3_discovery": "Person discovers the product/app/program. Holding it up or showing on phone.",
+            "4_transform_1": "Month 1 results — subtle but visible changes. 'Wait is this working?'",
+            "5_transform_2": "Month 3+ results — clear transformation. 'Okay this actually changed everything.'",
+            "6_cta": "Confident pose. Product/app name + link in bio."
+        },
+        "prompt_rules": {
+            "lock_across_all_slides": [
+                "body proportions",
+                "camera angle",
+                "gym/location background",
+                "lighting"
+            ],
+            "change_per_slide": [
+                "body composition (subtle, believable)",
+                "expression/confidence",
+                "outfit freshness"
+            ]
+        },
+        "hook_formulas": [
+            "My trainer said I'd never look like [goal]",
+            "I showed my gym buddy what AI thinks I could look like in 6 months",
+            "3 months apart. Same mirror, same angle.",
+            "POV: You actually stuck with it this time"
+        ]
+    },
+    "saas": {
+        "name": "Productivity / SaaS",
+        "slide_concept": "Before/after workflow visualization or results demonstration",
+        "slide_structure": {
+            "1_hook": "The messy 'before' — chaotic spreadsheets, cluttered desktop, overwhelming task list.",
+            "2_problem": "Amplify — person stressed, wasting time, missed deadlines.",
+            "3_discovery": "Person discovers the app. Phone/laptop screen showing clean UI.",
+            "4_transform_1": "The workflow now — organized, automated, clean dashboard.",
+            "5_transform_2": "The results — time saved, goals hit, relaxed and productive.",
+            "6_cta": "Person smiling at laptop/phone. App name + link in bio."
+        },
+        "prompt_rules": {
+            "lock_across_all_slides": [
+                "person",
+                "desk/workspace setup",
+                "lighting"
+            ],
+            "change_per_slide": [
+                "screen content",
+                "desk organization",
+                "person's expression/stress level"
+            ]
+        },
+        "hook_formulas": [
+            "My boss said my workflow is a mess so I showed her this",
+            "I was spending 4 hours on [task] until I found this",
+            "POV: You automate the one thing that was eating your day",
+            "This app saved me [X] hours a week — not exaggerating"
+        ]
+    },
+    "food": {
+        "name": "Food / Recipe",
+        "slide_concept": "Same ingredients, different meals OR same dish, progressive cooking steps",
+        "slide_structure": {
+            "1_hook": "The relatable food struggle — boring meals, empty fridge, takeout guilt.",
+            "2_problem": "Amplify — same 3 meals on repeat, unhealthy habits, wasted groceries.",
+            "3_discovery": "Person discovers the product/app/cookbook. Holding it or showing on phone.",
+            "4_transform_1": "First meal made — plated beautifully. 'Wait I actually made this?'",
+            "5_transform_2": "Second meal or meal prep — variety and quality. 'Okay I'm a chef now.'",
+            "6_cta": "Person enjoying food, smiling. Product name + link in bio."
+        },
+        "prompt_rules": {
+            "lock_across_all_slides": [
+                "tableware/plates",
+                "table/background",
+                "lighting",
+                "overhead camera angle"
+            ],
+            "change_per_slide": [
+                "food content",
+                "plating style",
+                "garnishes"
+            ]
+        },
+        "hook_formulas": [
+            "I eat the same 3 meals every week and I'm done with it",
+            "This turned my sad desk lunch into THIS",
+            "POV: You actually meal prep and it doesn't taste like cardboard",
+            "My grocery bill went down but my meals went UP"
+        ]
+    }
+}

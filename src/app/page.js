@@ -38,15 +38,10 @@ const MODES = [
     label: "Ad Creative",
     icon: "📦",
     desc: "You + a product — organic influencer-style content",
-    vibeLabel: "The marketing angle",
-    vibeHint: "Describe the hook or the problem this product solves",
-    placeholder: "This changed my morning routine — honest review about the texture...",
-    vibes: [
-      "Direct hook — why this is better than what you're using",
-      "Soft sell — how this fits into a busy morning routine",
-      "Problem/Solution — the one thing that fixed my skin texture",
-      "The unboxing — first impressions of the packaging and feel",
-    ],
+    vibeLabel: "Describe your product",
+    vibeHint: "What is the product, what does it do, who is it for?",
+    placeholder: "Derma Co 5% Vitamin C Serum — brightens dull skin, reduces dark spots, lightweight gel texture. For people struggling with uneven skin tone...",
+    vibes: [],
   },
 ];
 
@@ -68,6 +63,9 @@ export default function Home() {
   const productInputRef = useRef(null);
   const exportRef = useRef(null);
   const [exportingPost, setExportingPost] = useState(null);
+
+  // Ad category
+  const [adCategory, setAdCategory] = useState("beauty");
 
   // Orientation
   const [genAspectRatio, setGenAspectRatio] = useState("9:16");
@@ -348,7 +346,7 @@ export default function Home() {
 
   // ──── Plan carousel ────
   const handlePlan = useCallback(async () => {
-    if (!vibe.trim() || planning) return;
+    if (!vibe.trim() || planning || generating) return;
     setPlanning(true);
     setError(null);
     setPlannedScenes(null);
@@ -368,65 +366,28 @@ export default function Home() {
             mode === "ad" && productImage
               ? { base64: productImage.base64, mimeType: productImage.mimeType }
               : undefined,
+          category: mode === "ad" ? adCategory : undefined,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Planning failed");
 
-      setPlannedScenes(data.scenes);
-      setPlannedStyling(data.styling || null);
-      // Auto-select all scenes
-      const autoSelected = new Set();
-      data.scenes.forEach((_, i) => autoSelected.add(i));
-      setSelectedSceneIds(autoSelected);
-    } catch (e) {
-      setError(e.message);
-    } finally {
+      const scenes = data.scenes;
+      const styling = data.styling || null;
+      setPlannedScenes(scenes);
+      setPlannedStyling(styling);
+
+      // Auto-generate immediately with all scenes
       setPlanning(false);
-    }
-  }, [vibe, mode, avatar, productImage, planning]);
+      setGenerating(true);
+      setSelectedIdx(0);
 
-  // ──── Update Planned Scene ────
-  const updatePlannedScene = (index, field, value) => {
-    setPlannedScenes((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
-      return next;
-    });
-  };
-
-  // ──── Toggle scene selection ────
-  const toggleSceneSelection = (index) => {
-    setSelectedSceneIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else if (next.size < 5) {
-        next.add(index);
-      }
-      return next;
-    });
-  };
-
-  // ──── Generate carousel ────
-  const handleGenerate = useCallback(async () => {
-    if (!plannedScenes || selectedSceneIds.size === 0 || generating) return;
-
-    // Only send the selected scenes
-    const selectedScenes = plannedScenes.filter((_, i) => selectedSceneIds.has(i));
-
-    setGenerating(true);
-    setError(null);
-    setSelectedIdx(0);
-    setResult(null);
-
-    try {
-      const res = await fetch("/api/generate", {
+      const genRes = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scenes: selectedScenes,
+          scenes,
           mode,
           avatar: avatar ? { base64: avatar.base64, mimeType: avatar.mimeType } : undefined,
           productImage:
@@ -434,22 +395,23 @@ export default function Home() {
               ? { base64: productImage.base64, mimeType: productImage.mimeType }
               : undefined,
           aspectRatio: genAspectRatio,
-          styling: plannedStyling || undefined,
+          styling: styling || undefined,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
+      const genData = await genRes.json();
+      if (!genRes.ok) throw new Error(genData.error || "Generation failed");
 
-      const newResult = { images: data.images, timestamp: Date.now(), vibe, mode, aspectRatio: genAspectRatio };
+      const newResult = { images: genData.images, timestamp: Date.now(), vibe, mode, aspectRatio: genAspectRatio };
       setResult(newResult);
       setResultHistory((prev) => [newResult, ...prev].slice(0, 20));
     } catch (e) {
       setError(e.message);
     } finally {
+      setPlanning(false);
       setGenerating(false);
     }
-  }, [vibe, mode, avatar, productImage, generating, plannedScenes, selectedSceneIds]);
+  }, [vibe, mode, avatar, productImage, planning, generating, adCategory, genAspectRatio]);
 
   // ──── Download ────
   // ──── Batch Export Logic ────
@@ -786,6 +748,39 @@ export default function Home() {
                   </div>
                 </div>
               )}
+
+              {/* Category selector (ad mode only) */}
+              {mode === "ad" && (
+                <div style={{ marginTop: "0.5rem" }}>
+                  <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.5rem" }}>Product Category</div>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    {[
+                      { id: "home", label: "🏠 Home/Interior" },
+                      { id: "beauty", label: "💄 Beauty" },
+                      { id: "fitness", label: "💪 Fitness" },
+                      { id: "saas", label: "💻 SaaS/Productivity" },
+                      { id: "food", label: "🍳 Food/Recipe" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setAdCategory(cat.id)}
+                        style={{
+                          padding: "0.4rem 0.75rem",
+                          borderRadius: "20px",
+                          border: adCategory === cat.id ? "1px solid #a78bfa" : "1px solid #333",
+                          background: adCategory === cat.id ? "rgba(167,139,250,0.15)" : "transparent",
+                          color: adCategory === cat.id ? "#a78bfa" : "#888",
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -829,12 +824,12 @@ export default function Home() {
                 <button
                   className={styles.generateBtn}
                   onClick={handlePlan}
-                  disabled={!vibe.trim() || planning}
+                  disabled={!vibe.trim() || planning || generating}
                 >
-                  {planning ? (
-                    <><span className={styles.spinner} /> Planning scenes…</>
+                  {(planning || generating) ? (
+                    <><span className={styles.spinner} /> {planning ? "Planning…" : "Generating…"}</>
                   ) : (
-                    <>✦ Plan Carousel</>
+                    <>✦ Generate Carousel</>
                   )}
                 </button>
               </section>
@@ -843,154 +838,23 @@ export default function Home() {
               {error && <div className={styles.error}>⚠ {error}</div>}
 
               {/* Loading */}
-              {generating && (
+              {(planning || generating) && (
                 <div className={styles.loadingResult}>
                   <div className={styles.loadingLens} />
-                  <div className={styles.loadingText}>Creating your {currentMode?.label.toLowerCase()}…</div>
+                  <div className={styles.loadingText}>
+                    {planning ? "Planning your scenes…" : `Generating your ${currentMode?.label.toLowerCase()}…`}
+                  </div>
                   <div className={styles.loadingSubtext}>
-                    {avatar ? "Character-consistent " : ""}5 images + captions in one shot
+                    {planning ? "AI is crafting the perfect story" : `${avatar ? "Character-consistent " : ""}images + captions`}
                   </div>
                 </div>
               )}
             </>
           )}
 
-          {/* ═══ REVIEW PLAN ═══ */}
-          {plannedScenes && !result && (
-            <>
-              <section className={styles.stepSection} style={{ animationDelay: "0.1s" }}>
-                <div className={styles.stepLabel}>
-                  <div className={styles.stepNumber}>4</div>
-                  <div className={styles.stepTitle}>Review & Edit Scenes</div>
-                </div>
-                <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
-                  {plannedScenes.length} scenes ready. Deselect any you want to skip. ({selectedSceneIds.size}/{plannedScenes.length} selected)
-                </p>
-                {plannedStyling && (
-                  <div style={{
-                    background: "linear-gradient(135deg, #1a1a2e, #16213e)", border: "1px solid #334",
-                    padding: "0.75rem 1rem", borderRadius: "8px", marginBottom: "1rem",
-                    display: "flex", gap: "1.5rem", fontSize: "0.85rem",
-                  }}>
-                    {plannedStyling.outfit && (
-                      <div><span style={{ color: "#888" }}>👗 Outfit:</span> <span style={{ color: "#ccc" }}>{plannedStyling.outfit}</span></div>
-                    )}
-                    {plannedStyling.hair && (
-                      <div><span style={{ color: "#888" }}>💇 Hair:</span> <span style={{ color: "#ccc" }}>{plannedStyling.hair}</span></div>
-                    )}
-                  </div>
-                )}
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  {plannedScenes.map((scene, i) => {
-                    const isSelected = selectedSceneIds.has(i);
-                    const isMaxed = false;
-                    const cameraColors = {
-                      selfie: "#4ade80", mirror_selfie: "#60a5fa", backcamera: "#f59e0b",
-                      pov: "#a78bfa", friend_candid: "#f472b6",
-                    };
-                    return (
-                      <div
-                        key={i}
-                        onClick={() => !isMaxed && toggleSceneSelection(i)}
-                        style={{
-                          display: "flex", flexDirection: "column", gap: "0.5rem",
-                          background: isSelected ? "#1a1a2e" : "#111",
-                          padding: "1rem", borderRadius: "12px",
-                          border: isSelected ? "2px solid #ecc245" : "1px solid #333",
-                          cursor: isMaxed ? "not-allowed" : "pointer",
-                          opacity: isMaxed ? 0.5 : 1,
-                          transition: "all 0.2s ease",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                            <div style={{
-                              width: "24px", height: "24px", borderRadius: "6px",
-                              border: isSelected ? "2px solid #ecc245" : "2px solid #555",
-                              background: isSelected ? "#ecc245" : "transparent",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: "14px", color: "#000", fontWeight: "700",
-                              flexShrink: 0,
-                            }}>
-                              {isSelected ? "✓" : ""}
-                            </div>
-                            <span style={{ fontWeight: "600", color: isSelected ? "#ecc245" : "#aaa" }}>Scene {i + 1}</span>
-                            {scene.camera && (
-                              <span style={{
-                                fontSize: "0.7rem", padding: "2px 8px", borderRadius: "4px",
-                                background: (cameraColors[scene.camera] || "#666") + "22",
-                                color: cameraColors[scene.camera] || "#888",
-                                border: `1px solid ${cameraColors[scene.camera] || "#666"}44`,
-                                textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.5px",
-                              }}>
-                                {scene.camera?.replace("_", " ")}
-                              </span>
-                            )}
-                          </div>
-                          {scene.requires_avatar && (
-                            <span style={{ fontSize: "0.7rem", color: "#888" }}>👤 Avatar</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: "0.95rem", color: "#ddd", fontStyle: "italic" }}>
-                          {scene.caption}
-                        </div>
-                        {scene.scene_prompt ? (
-                          <div style={{
-                            background: "#1a1a1a", border: "1px solid #333",
-                            padding: "0.75rem", borderRadius: "6px", fontSize: "0.85rem",
-                            display: "flex", flexDirection: "column", gap: "0.4rem",
-                          }}>
-                            {scene.scene_prompt.expression && (
-                              <div><span style={{ color: "#888" }}>😊 Expression:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.expression}</span></div>
-                            )}
-                            <div><span style={{ color: "#888" }}>✋ Hand:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.free_hand}</span></div>
-                            <div><span style={{ color: "#888" }}>📍 Setting:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.environment}</span></div>
-                            {scene.scene_prompt.key_item && (
-                              <div><span style={{ color: "#888" }}>📦 Item:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.key_item}</span></div>
-                            )}
-                          </div>
-                        ) : (
-                          <textarea
-                            value={scene.prompt}
-                            onChange={(e) => { e.stopPropagation(); updatePlannedScene(i, 'prompt', e.target.value); }}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              background: "#1a1a1a", color: "#ccc", border: "1px solid #333",
-                              padding: "0.5rem", borderRadius: "6px", width: "100%",
-                              fontFamily: "inherit", fontSize: "0.85rem",
-                              minHeight: "60px", resize: "vertical",
-                            }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  className={styles.avatarBtn}
-                  style={{ marginTop: "1rem" }}
-                  onClick={() => { setPlannedScenes(null); setPlannedStyling(null); setSelectedSceneIds(new Set()); }}
-                >
-                  ← Back to Vibe
-                </button>
-              </section>
+          {/* Review step removed — plan flows directly to generate */}
 
-              {/* ═══ Generate Button ═══ */}
-              <section className={styles.generateSection}>
-                <button
-                  className={styles.generateBtn}
-                  onClick={handleGenerate}
-                  disabled={generating || selectedSceneIds.size === 0}
-                >
-                  {generating ? (
-                    <><span className={styles.spinner} /> Generating {selectedSceneIds.size} image{selectedSceneIds.size !== 1 ? "s" : ""}…</>
-                  ) : (
-                    <>✦ Generate {selectedSceneIds.size} Image{selectedSceneIds.size !== 1 ? "s" : ""}</>
-                  )}
-                </button>
-              </section>
-            </>
-          )}
+
 
           {/* ═══ Carousel Result ═══ */}
           {result && !generating && (
@@ -1003,8 +867,8 @@ export default function Home() {
                 {result.images.map((item, i) => (
                   <div
                     key={item.timestamp}
-                    className={selectedIdx === i ? styles.carouselSlideActive : styles.carouselSlide}
-                    onClick={() => setSelectedIdx(i)}
+                    className={styles.carouselSlide}
+                    style={{ position: 'relative' }}
                   >
                     <img src={item.image} alt={`Image ${i + 1}`} />
                     <div className={styles.carouselSlideInfo}>
@@ -1013,46 +877,27 @@ export default function Home() {
                         {item.caption || "—"}
                       </div>
                     </div>
+                    <div style={{
+                      position: 'absolute', top: '8px', right: '8px',
+                      display: 'flex', gap: '4px',
+                    }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDownloadTrigger(item); }}
+                        style={{
+                          background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,255,255,0.2)',
+                          color: '#fff', borderRadius: '6px', padding: '4px 8px',
+                          fontSize: '0.7rem', cursor: 'pointer', backdropFilter: 'blur(4px)',
+                        }}
+                      >↓</button>
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {result.images[selectedIdx] && (
-                <div className={styles.selectedDetail}>
-                  <img
-                    className={styles.selectedImage}
-                    src={result.images[selectedIdx].image}
-                    alt={`Selected image ${selectedIdx + 1}`}
-                  />
-                  {result.images[selectedIdx].caption && (
-                    <div className={styles.selectedScene}>
-                      <strong>Caption:</strong> {result.images[selectedIdx].caption}
-                    </div>
-                  )}
-                  {result.images[selectedIdx].scene_prompt && (
-                    <div className={styles.selectedScene} style={{ marginTop: '8px', fontSize: '0.9rem', color: '#888' }}>
-                      <strong>AI Scene Prompt:</strong> {result.images[selectedIdx].scene_prompt}
-                    </div>
-                  )}
-                  <div className={styles.selectedActions}>
-                    <button
-                      className={styles.actionBtn}
-                      onClick={() => handleDownloadTrigger(result.images[selectedIdx])}
-                    >
-                      ↓ Download
-                    </button>
-
-                  </div>
-                </div>
-              )}
-
-              <div className={styles.downloadAllBar}>
+              <div className={styles.genActions} style={{ marginTop: '1rem' }}>
                 <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
-                  ↓ Download All {result.images.length} Images
+                  ↓ Download All {result.images.length}
                 </button>
-              </div>
-
-              <div className={styles.genActions}>
                 {packs.some(p => p.images.length > 0 && p.images[0].image === result.images[0].image) ? (
                   <button className={styles.saveLibraryBtn} disabled style={{ opacity: 0.6, cursor: 'default' }}>
                     ♥ Saved

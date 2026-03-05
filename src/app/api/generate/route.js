@@ -35,7 +35,9 @@ export async function POST(request) {
         // Build contents array: [images...] + [text prompt]
         const contents = [];
 
-        if (avatar && scene.requires_avatar !== false) {
+        // Send avatar when face OR hands are visible (for skin tone consistency)
+        const handsVisible = scene.scene_prompt?.hands_visible ?? 0;
+        if (avatar && (scene.requires_avatar || handsVisible > 0)) {
           contents.push({ inlineData: { data: avatar.base64, mimeType: avatar.mimeType || "image/png" } });
         }
 
@@ -48,53 +50,40 @@ export async function POST(request) {
         const outfit = sp.outfit || (styling && styling.outfit) || "";
         const hair = (styling && styling.hair) || "";
 
-        // Camera-specific pose_and_action
-        const poseByCamera = {
-          selfie: {
-            perspective: "Close-up front-facing shot, slightly from below, one arm visibly extended toward camera",
-            phone_hand: "Right hand extended forward holding phone (arm partially visible at bottom edge of frame)",
-            free_hand: sp.free_hand || "relaxed at side",
-            face_visible: true
-          },
-          mirror_selfie: {
-            perspective: "Reflected in a mirror, phone visible in one hand, full or half body visible in reflection",
-            phone_hand: "One hand holding phone, visible in the mirror reflection",
-            free_hand: sp.free_hand || "relaxed at side",
-            face_visible: true
-          },
-          pov: {
-            perspective: "First-person point of view looking down, shot from eye level, NO face visible at all",
-            phone_hand: "One hand holds the phone (completely out of frame, not visible)",
-            free_hand: sp.free_hand || "resting on surface",
-            face_visible: false
-          },
-          backcamera: {
-            perspective: "Full or half body shot from a few feet away, as if taken by a friend or timer",
-            phone_hand: "No phone in hands",
-            free_hand: sp.free_hand || "both hands free, natural pose",
-            face_visible: true
-          },
-        };
+        const jsonPrompt = {};
 
-        const jsonPrompt = {
-          subject: {
+        if (scene.requires_avatar) {
+          // Face visible: full subject + apparel
+          jsonPrompt.subject = {
             identity: "this person (use the reference photo provided)",
             facial_expression: sp.expression || "natural",
             skin_texture: "Natural, realistic skin with visible pores and texture, matte finish, no airbrushing"
-          },
-          apparel: {
+          };
+          jsonPrompt.apparel = {
             outfit: outfit || "casual, contextually appropriate clothing",
             hair: hair || "natural"
-          },
-          pose_and_action: poseByCamera[scene.camera] || poseByCamera.backcamera,
-          environment: {
-            location: sp.environment || "contextually appropriate setting",
-            key_item: sp.key_item || ""
-          }
+          };
+        } else if (handsVisible > 0) {
+          // Hands/body only (no face): match skin tone from reference
+          jsonPrompt.subject = {
+            identity: "this person's hands and arms only (use the reference photo for skin tone). Do NOT show the face.",
+          };
+        }
+
+        jsonPrompt.pose_and_action = {
+          camera_angle: sp.angle || "natural medium shot",
+          hands_visible: handsVisible,
+          hand_action: sp.hand_action || ""
         };
 
-        // Remove empty key_item to keep prompt clean
+        jsonPrompt.environment = {
+          location: sp.environment || "contextually appropriate setting",
+          key_item: sp.key_item || ""
+        };
+
+        // Clean up empty fields
         if (!jsonPrompt.environment.key_item) delete jsonPrompt.environment.key_item;
+        if (!jsonPrompt.pose_and_action.hand_action) delete jsonPrompt.pose_and_action.hand_action;
 
         const finalPrompt = `Generate a photo matching this description:\n${JSON.stringify(jsonPrompt, null, 2)}\n\n${photoPrompt}`;
         contents.push(finalPrompt);
