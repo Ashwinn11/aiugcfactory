@@ -448,10 +448,11 @@ export default function Home() {
       setIsExporting(true);
       const capture = async () => {
         try {
-          // Increase capture resolution to 3x for professional crispness (1620x2880)
+          // Cap pixelRatio to bypass iOS Safari's native maximum hardware canvas size limits (~16 Megapixels).
+          // 1x scale at 1080p base bounds guarantees rendering without black-screen export corruption.
           const dataUrl = await toPng(exportRef.current, { 
             quality: 1.0, 
-            pixelRatio: 3,
+            pixelRatio: 1,
             cacheBust: true,
             style: { 
               transform: 'none', 
@@ -1175,16 +1176,20 @@ export default function Home() {
                               left: `${ov.x}%`,
                               top: `${ov.y}%`,
                               transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
-                              fontSize: `${fontCqw}cqw`
+                              fontSize: `${fontCqw}cqw`,
+                              touchAction: 'none'
                             }}
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               const startX = e.clientX;
                               const startY = e.clientY;
                               const startPosX = ov.x;
                               const startPosY = ov.y;
                               const rect = e.currentTarget.parentElement.getBoundingClientRect();
                               
-                              const onMouseMove = (moveE) => {
+                              let latestPack = editingPack;
+                              
+                              const onPointerMove = (moveE) => {
+                                moveE.preventDefault();
                                 const deltaX = ((moveE.clientX - startX) / rect.width) * 100;
                                 const deltaY = ((moveE.clientY - startY) / rect.height) * 100;
                                 const nextImages = [...editingPack.images];
@@ -1195,15 +1200,18 @@ export default function Home() {
                                   y: Math.max(0, Math.min(100, startPosY + deltaY))
                                 };
                                 nextImages[editorIdx].overlays = nextOverlays;
-                                setEditingPack(prev => ({ ...prev, images: nextImages }));
+                                latestPack = { ...editingPack, images: nextImages };
+                                setEditingPack(latestPack);
                               };
-                              const onMouseUp = () => {
-                                window.removeEventListener("mousemove", onMouseMove);
-                                window.removeEventListener("mouseup", onMouseUp);
-                                commitToHistory(editingPack);
+                              const onPointerUp = () => {
+                                window.removeEventListener("pointermove", onPointerMove);
+                                window.removeEventListener("pointerup", onPointerUp);
+                                window.removeEventListener("pointercancel", onPointerUp);
+                                commitToHistory(latestPack);
                               };
-                              window.addEventListener("mousemove", onMouseMove);
-                              window.addEventListener("mouseup", onMouseUp);
+                              window.addEventListener("pointermove", onPointerMove, { passive: false });
+                              window.addEventListener("pointerup", onPointerUp);
+                              window.addEventListener("pointercancel", onPointerUp);
                             }}
                           >
                             <div style={{ display: 'grid' }}>
@@ -1440,7 +1448,8 @@ export default function Home() {
             height: exportingPost.aspectRatio === '1:1' ? '1080px' : exportingPost.aspectRatio === '3:4' ? '1440px' : '1920px', 
             position: 'relative',
             overflow: 'hidden',
-            backgroundColor: '#000'
+            backgroundColor: '#000',
+            containerType: 'inline-size'
           }}>
             <img 
               src={exportingPost.image} 
@@ -1463,13 +1472,17 @@ export default function Home() {
                   0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
                   1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor}
                 ` : '';
+                // Responsive text scaling to emulate exact Canvas editor sizes
+                const scaleRatio = (ov.size || 30) / 30;
+                const fontCqw = ((ov.fontSize || 24) / 540) * 100 * scaleRatio;
+
                 return (
                   <div key={idx} className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`} style={{
                     position: "absolute",
                     left: `${ov.x}%`,
                     top: `${ov.y}%`,
-                    transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
-                    fontSize: `${ov.fontSize || 24}px`, // Standardizing to the exact same Surface coordinate system
+                    transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
+                    fontSize: `${fontCqw}cqw`, 
                   }}>
                     <div style={{ display: 'grid' }}>
                       {isSolid && (
