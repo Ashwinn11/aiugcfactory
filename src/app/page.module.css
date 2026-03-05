@@ -1802,14 +1802,118 @@
     max-height: 95vh;
   }
 
-  .editorSidebar {
-    width: 100%;
-    max-height: 300px;
+  .editorAssetPanel {
+    display: none !important;
   }
 
-  .editorPreview {
-    padding: 20px;
+  .editorSidebar {
+    display: none !important;
   }
+
+  .editorStage {
+    padding: 10px 5px !important;
+    height: 55vh !important;
+    min-height: 350px !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #000 !important;
+    overflow: hidden !important;
+  }
+
+  .canvasFrame {
+    height: 100% !important;
+    width: auto !important;
+    max-width: 100% !important;
+    aspect-ratio: auto;
+    /* Handled by inline style */
+    border-radius: 12px !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+    display: block !important;
+    position: relative !important;
+  }
+
+  .navArrowLeft,
+  .navArrowRight {
+    width: 42px !important;
+    height: 42px !important;
+    font-size: 1.2rem !important;
+    top: 30% !important;
+  }
+
+  .navArrowLeft {
+    left: 15px !important;
+  }
+
+  .navArrowRight {
+    right: 15px !important;
+  }
+
+  .mobileToolbarContainer {
+    display: flex !important;
+  }
+}
+
+.mobileToolbarContainer {
+  display: none;
+  width: 100%;
+  background: #000;
+  border-top: 1px solid #1a1a1a;
+  padding: 16px 24px calc(16px + env(safe-area-inset-bottom, 24px)) 24px;
+  flex-direction: column;
+  z-index: 1000;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.mobileToolbarContent {
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.mobileCropToolbar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.mobileRangeRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobileRangeRow input {
+  flex: 1;
+}
+
+.mobileCropActions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.mobileCropActions button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.mobileResetBtn {
+  background: #222;
+  color: #fff;
+  border: 1px solid #333;
+}
+
+.mobileSaveBtn {
+  background: var(--amber-400);
+  color: #000;
+  border: none;
 }
 
 /* ─── Library View ────────────────────────────────────────── */
@@ -2335,6 +2439,272 @@
   font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* ─── Immersive Quick Edit (TikTok Style) ─── */
+.quickEditOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.quickEditHeader {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent);
+}
+
+.quickEditHeaderCenter {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.quickToolBtn {
+  background: transparent;
+  border: none;
+  color: white;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  cursor: pointer;
+  border-radius: 50%;
+  position: relative;
+}
+
+.quickToolBtnActive {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rainbowCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(red, orange, yellow, green, blue, indigo, violet, red);
+  border: 2px solid white;
+}
+
+.doneBtn {
+  background: transparent;
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 10px 0;
+  cursor: pointer;
+  min-width: 60px;
+  text-align: right;
+}
+
+.quickEditMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.quickEditInputArea {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.quickFontSizeSliderContainer,
+.quickScaleSliderContainer {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.quickFontSizeSliderContainer {
+  left: 20px;
+}
+
+.quickScaleSliderContainer {
+  right: 20px;
+}
+
+.sliderLabel {
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.quickFontSizeSlider {
+  appearance: none;
+  width: 4px;
+  height: 200px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+  writing-mode: bt-lr;
+  /* IE/Edge */
+  -webkit-appearance: slider-vertical;
+  /* Webkit */
+}
+
+.quickFontSizeSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.quickEditMain {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 40px;
+}
+
+.quickEditInputArea {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.quickEditTextarea {
+  width: auto;
+  min-width: 50px;
+  max-width: 80vw;
+  background: transparent;
+  border: none;
+  color: white;
+  outline: none;
+  resize: none;
+  line-height: 1.3;
+  display: block;
+  overflow: visible;
+  font-weight: 700;
+  transition: transform 0.05s linear;
+  /* Smooth but fast for real-time scaling */
+}
+
+/* ─── Focus Mode (Hide details when editing) ─── */
+.isFocused {
+  overflow: hidden !important;
+  max-height: 100vh !important;
+}
+
+.isFocused .editorHeader,
+.isFocused .editorAssetPanel,
+.isFocused .editorSidebar,
+.isFocused .mobileToolbarContainer,
+.isFocused .navArrowLeft,
+.isFocused .navArrowRight,
+.isFocused .historySection {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  display: none !important;
+}
+
+.quickEditOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.editOverlayControls {
+  padding-bottom: calc(30px + env(safe-area-inset-bottom, 20px));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.4), transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fontSelectorStrip {
+  display: flex;
+  overflow-x: auto;
+  gap: 12px;
+  padding: 0 20px;
+  scrollbar-width: none;
+}
+
+.fontSelectorStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.fontPill {
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.fontPillActive {
+  background: white;
+  color: black;
+  border-color: white;
+  transform: scale(1.05);
+}
+
+.quickColorStrip {
+  display: flex;
+  overflow-x: auto;
+  gap: 12px;
+  padding: 10px 20px;
+  scrollbar-width: none;
+}
+
+.quickColorStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.mobileActionBar {
+  display: none;
 }
 
 .cropPresetsHeader {
