@@ -12,7 +12,11 @@ import { join } from "path";
 const AVATARS_DIR = join(process.cwd(), "public", "avatars");
 
 function ensureDir() {
-  mkdirSync(AVATARS_DIR, { recursive: true });
+  try {
+    mkdirSync(AVATARS_DIR, { recursive: true });
+  } catch (e) {
+    // Ignore ROFS
+  }
 }
 
 // GET — List all saved avatars
@@ -32,17 +36,26 @@ export async function GET() {
       mimeType: "image/png",
     });
 
-    // Copy to avatars dir if not already there
-    const dest = join(AVATARS_DIR, "default.png");
-    if (!existsSync(dest)) {
-      writeFileSync(dest, readFileSync(legacyAvatar));
+    try {
+      // Copy to avatars dir if not already there
+      const dest = join(AVATARS_DIR, "default.png");
+      if (!existsSync(dest)) {
+        writeFileSync(dest, readFileSync(legacyAvatar));
+      }
+    } catch (e) {
+      // Ignore EROFS
     }
   }
 
   // List all avatars in the avatars directory
-  const files = readdirSync(AVATARS_DIR).filter((f) =>
-    /\.(png|jpg|jpeg|webp)$/i.test(f)
-  );
+  let files = [];
+  try {
+    files = readdirSync(AVATARS_DIR).filter((f) =>
+      /\.(png|jpg|jpeg|webp)$/i.test(f)
+    );
+  } catch (e) {
+    // Safely ignore if directory doesn't exist on serverless
+  }
 
   for (const file of files) {
     if (file === "default.png" && avatars.some((a) => a.id === "default"))
@@ -99,12 +112,19 @@ export async function POST(request) {
     const filename = `${id}.${ext}`;
     const filePath = join(AVATARS_DIR, filename);
 
-    writeFileSync(filePath, buffer);
+    let savedUrl = `/avatars/${filename}`;
+
+    try {
+      writeFileSync(filePath, buffer);
+    } catch (writeErr) {
+      console.warn("Could not save to disk (likely Vercel readonly filesystem). Falling back to Base64 runtime layer:", writeErr.message);
+      savedUrl = null; // Forces frontend to use the base64 payload instead of a broken URL route
+    }
 
     return NextResponse.json({
       id,
       name: file.name || filename,
-      url: `/avatars/${filename}`,
+      url: savedUrl,
       base64: buffer.toString("base64"),
       mimeType,
     });
@@ -129,10 +149,12 @@ export async function DELETE(request) {
       );
     }
 
-    const files = readdirSync(AVATARS_DIR).filter((f) => f.startsWith(id));
-    for (const file of files) {
-      unlinkSync(join(AVATARS_DIR, file));
-    }
+    try {
+      const files = readdirSync(AVATARS_DIR).filter((f) => f.startsWith(id));
+      for (const file of files) {
+        unlinkSync(join(AVATARS_DIR, file));
+      }
+    } catch(e) { /* ignore EROFS */ }
 
     return NextResponse.json({ success: true });
   } catch (err) {

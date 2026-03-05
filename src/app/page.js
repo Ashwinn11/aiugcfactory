@@ -453,7 +453,7 @@ export default function Home() {
           const dataUrl = await toPng(exportRef.current, { 
             quality: 1.0, 
             pixelRatio: 1,
-            cacheBust: true,
+            cacheBust: false,
             style: { 
               transform: 'none', 
               transformOrigin: 'top left',
@@ -1431,17 +1431,17 @@ export default function Home() {
         </section>
       )}
 
-      {/* off-screen high-res render target for capturing image downloads */}
       {exportingPost && (
         <div style={{ 
-          position: 'fixed', 
-          top: '-10000px', 
-          left: '-10000px', 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          width: '100%',
+          height: '100%',
           pointerEvents: 'none', 
-          zIndex: -9999,
-          opacity: 1,
-          visibility: 'visible',
-          background: '#000'
+          zIndex: -1,
+          opacity: 0.001,
+          overflow: 'hidden'
         }}>
           <div id="export-surface" ref={exportRef} style={{ 
             width: '1080px', 
@@ -1455,7 +1455,6 @@ export default function Home() {
               src={exportingPost.image} 
               alt="Exporting" 
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-              crossOrigin="anonymous" 
             />
             <div className={styles.savedOverlay}>
               {exportingPost.overlays?.map((ov, idx) => {
