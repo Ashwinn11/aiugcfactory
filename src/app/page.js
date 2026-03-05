@@ -4,6 +4,15 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { toPng } from "html-to-image";
 import Cropper from 'react-easy-crop';
 import styles from "./page.module.css";
+import * as Icons from "lucide-react";
+
+/* ─── Icon Component ─────────────────────────────────────── */
+
+const Icon = ({ name, size = 18, strokeWidth = 2, className, ...props }) => {
+  const LucideIcon = Icons[name];
+  if (!LucideIcon) return null;
+  return <LucideIcon size={size} strokeWidth={strokeWidth} className={className} {...props} />;
+};
 
 /* ─── Mode Configs ───────────────────────────────────────── */
 
@@ -11,7 +20,8 @@ const MODES = [
   {
     id: "photodump",
     label: "Photo Dump",
-    icon: "📸",
+    iconName: "Camera",
+    iconColor: "#38bdf8", // Sky blue
     desc: "Mixed moments — selfies, food, outfits, views across different times",
     placeholder: "Saturday in the city — thrift shopping and sunset rooftop...",
     vibes: [
@@ -24,7 +34,8 @@ const MODES = [
   {
     id: "carousel",
     label: "Post Carousel",
-    icon: "🎠",
+    iconName: "Layers",
+    iconColor: "#c084fc", // Purple
     desc: "One occasion — cohesive story from a single event or moment",
     placeholder: "Date night at the new Italian spot downtown...",
     vibes: [
@@ -37,7 +48,8 @@ const MODES = [
   {
     id: "ad",
     label: "Ad Creative",
-    icon: "📦",
+    iconName: "Package",
+    iconColor: "#fbbf24", // Amber
     desc: "You + a product — organic influencer-style content",
     vibeLabel: "Describe your product",
     vibeHint: "What is the product, what does it do, who is it for?",
@@ -128,7 +140,13 @@ export default function Home() {
       setTimeout(() => {
         quickEditRef.current.focus();
       }, 100);
+      document.body.classList.add(styles.fixedBody);
+    } else {
+      document.body.classList.remove(styles.fixedBody);
     }
+    return () => {
+      document.body.classList.remove(styles.fixedBody);
+    };
   }, [isQuickEditing]);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -590,7 +608,9 @@ export default function Home() {
       {/* Header */}
       <header className={styles.header}>
         <div className={styles.logoArea}>
-          <div className={styles.logoIcon}>🎬</div>
+          <div className={styles.logoIcon}>
+            <Icon name="Clapperboard" size={20} strokeWidth={2.5} color="var(--amber-on)" />
+          </div>
           <div className={styles.logoText}>
             AI UGC <span>Factory</span>
           </div>
@@ -679,7 +699,14 @@ export default function Home() {
                   className={mode === m.id ? styles.modeCardActive : styles.modeCard}
                   onClick={() => requestModeChange(m.id)}
                 >
-                  <div className={styles.modeIcon}>{m.icon}</div>
+                  <div className={styles.modeIcon}>
+                    <Icon 
+                      name={m.iconName} 
+                      size={24} 
+                      strokeWidth={2} 
+                      color={mode === m.id ? m.iconColor : "var(--text-3)"} 
+                    />
+                  </div>
                   <div className={styles.modeLabel}>{m.label}</div>
                   <div className={styles.modeDesc}>{m.desc}</div>
                 </button>
@@ -706,7 +733,9 @@ export default function Home() {
                   ) : avatar?.base64 ? (
                     <img src={`data:${avatar.mimeType};base64,${avatar.base64}`} alt="Avatar" />
                   ) : (
-                    <span className={styles.avatarEmpty}>👤</span>
+                    <div className={styles.avatarEmpty}>
+                      <Icon name="User" size={24} strokeWidth={1.5} />
+                    </div>
                   )}
                 </div>
                 <div className={styles.avatarInfo}>
@@ -747,7 +776,9 @@ export default function Home() {
                     {productImage?.url ? (
                       <img src={productImage.url} alt="Product" />
                     ) : (
-                      <span className={styles.avatarEmpty}>📦</span>
+                      <div className={styles.avatarEmpty}>
+                        <Icon name="Package" size={24} strokeWidth={1.5} />
+                      </div>
                     )}
                   </div>
                   <div className={styles.avatarInfo}>
@@ -790,11 +821,11 @@ export default function Home() {
                   <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.5rem" }}>Product Category</div>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                     {[
-                      { id: "home", label: "🏠 Home/Interior" },
-                      { id: "beauty", label: "💄 Beauty" },
-                      { id: "fitness", label: "💪 Fitness" },
-                      { id: "saas", label: "💻 SaaS/Productivity" },
-                      { id: "food", label: "🍳 Food/Recipe" },
+                      { id: "home", label: "Home/Interior", icon: "Home", color: "#a8a29e" },
+                      { id: "beauty", label: "Beauty", icon: "Sparkles", color: "#f472b6" },
+                      { id: "fitness", label: "Fitness", icon: "Activity", color: "#4ade80" },
+                      { id: "saas", label: "SaaS/Productivity", icon: "Monitor", color: "#60a5fa" },
+                      { id: "food", label: "Food/Recipe", icon: "Utensils", color: "#fb923c" },
                     ].map((cat) => (
                       <button
                         key={cat.id}
@@ -802,14 +833,18 @@ export default function Home() {
                         style={{
                           padding: "0.4rem 0.75rem",
                           borderRadius: "20px",
-                          border: adCategory === cat.id ? "1px solid #a78bfa" : "1px solid #333",
-                          background: adCategory === cat.id ? "rgba(167,139,250,0.15)" : "transparent",
-                          color: adCategory === cat.id ? "#a78bfa" : "#888",
+                          border: adCategory === cat.id ? `1px solid ${cat.color}` : "1px solid #333",
+                          background: adCategory === cat.id ? `${cat.color}20` : "transparent",
+                          color: adCategory === cat.id ? cat.color : "#666",
                           fontSize: "0.8rem",
                           cursor: "pointer",
                           transition: "all 0.2s",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px"
                         }}
                       >
+                        <Icon name={cat.icon} size={14} color={adCategory === cat.id ? cat.color : "#666"} />
                         {cat.label}
                       </button>
                     ))}
@@ -868,13 +903,13 @@ export default function Home() {
                   {(planning || generating) ? (
                     <><span className={styles.spinner} /> {planning ? "Planning…" : "Generating…"}</>
                   ) : (
-                    <>✦ Generate Carousel</>
+                    <><Icon name="Sparkles" size={18} fill="#ffeb3b" color="#ffeb3b" /> Generate Carousel</>
                   )}
                 </button>
               </section>
 
               {/* Error */}
-              {error && <div className={styles.error}>⚠ {error}</div>}
+              {error && <div className={styles.error}><Icon name="AlertTriangle" size={16} /> {error}</div>}
 
               {/* Loading */}
               {(planning || generating) && (
@@ -899,7 +934,7 @@ export default function Home() {
           {result && !generating && (
             <section className={styles.carouselSection}>
               <div className={styles.carouselLabel}>
-                <span>◉</span> Your {currentMode?.label.toLowerCase()} — {result.images.length} images
+                <Icon name="CircleDot" size={12} className={styles.liveIndicator} /> Your {currentMode?.label.toLowerCase()} — {result.images.length} images
               </div>
 
               <div className={styles.carouselTrack}>
@@ -924,10 +959,13 @@ export default function Home() {
                         onClick={(e) => { e.stopPropagation(); handleDownloadTrigger(item); }}
                         style={{
                           background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,255,255,0.2)',
-                          color: '#fff', borderRadius: '6px', padding: '4px 8px',
+                          color: '#fff', borderRadius: '6px', padding: '6px',
                           fontSize: '0.7rem', cursor: 'pointer', backdropFilter: 'blur(4px)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}
-                      >↓</button>
+                      >
+                        <Icon name="Download" size={14} />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -935,19 +973,19 @@ export default function Home() {
 
               <div className={styles.genActions} style={{ marginTop: '1rem' }}>
                 <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
-                  ↓ Download All {result.images.length}
+                  <Icon name="Download" size={16} color="#34d399" /> Download All {result.images.length}
                 </button>
                 {packs.some(p => p.images.length > 0 && p.images[0].image === result.images[0].image) ? (
                   <button className={styles.saveLibraryBtn} disabled style={{ opacity: 0.6, cursor: 'default' }}>
-                    ♥ Saved
+                    <Icon name="Heart" size={16} fill="#f43f5e" color="#f43f5e" /> Saved
                   </button>
                 ) : (
                   <button className={styles.saveLibraryBtn} onClick={() => handleSave(result)}>
-                    ♥ Save to Library
+                    <Icon name="Heart" size={16} color="#f43f5e" /> Save to Library
                   </button>
                 )}
                 <button className={styles.newGenBtn} onClick={requestFreshStart}>
-                  ↻ Start Fresh
+                  <Icon name="RotateCcw" size={16} color="#a1a1aa" /> Start Fresh
                 </button>
               </div>
             </section>
@@ -960,7 +998,9 @@ export default function Home() {
         <section className={styles.stepSection}>
           <div className={styles.libraryHeader}>
             <div className={styles.stepLabel}>
-              <div className={styles.stepNumber}>★</div>
+              <div className={styles.stepNumber}>
+                <Icon name="Star" size={12} fill="#fbbf24" color="#fbbf24" />
+              </div>
               <div className={styles.stepTitle}>Your Saved Packs</div>
             </div>
             <button className={styles.newPackBtn} onClick={() => {
@@ -974,12 +1014,16 @@ export default function Home() {
               setEditingPack(newPack);
               setEditorIdx(0);
               setView("editor");
-            }}>＋ New Pack</button>
+            }}>
+              <Icon name="Plus" size={16} /> New Pack
+            </button>
           </div>
           
           {packs.length === 0 ? (
             <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>📂</div>
+              <div className={styles.emptyIcon}>
+                <Icon name="FolderOpen" size={48} strokeWidth={1} />
+              </div>
               <div className={styles.emptyTitle}>Nothing saved yet</div>
               <div className={styles.emptyDesc}>
                 Generate some images or create a new pack to see them here.
@@ -1069,10 +1113,16 @@ export default function Home() {
                       }
                       setEditingPack(packToEdit);
                       setEditorIdx(0);
-                      setView("editor");
-                    }}>✎</button>
-                    <button className={styles.savedActionBtn} onClick={() => setDownloadChoicePack(pack)}>↓</button>
-                    <button className={styles.savedActionBtn} style={{ background: "rgba(239, 68, 68, 0.6)" }} onClick={() => handleRemovePack(pack.id)}>✕</button>
+                      requestViewChange("editor");
+                    }}>
+                      <Icon name="Pencil" size={14} />
+                    </button>
+                    <button className={styles.savedActionBtn} onClick={() => setDownloadChoicePack(pack)}>
+                      <Icon name="Download" size={14} />
+                    </button>
+                    <button className={styles.savedActionBtn} style={{ background: "rgba(239, 68, 68, 0.6)" }} onClick={() => handleRemovePack(pack.id)}>
+                      <Icon name="X" size={14} />
+                    </button>
                   </div>
                   <div className={styles.savedCardInfo}>
                     <div className={styles.savedCardCaption}>{pack.title}</div>
@@ -1090,7 +1140,9 @@ export default function Home() {
         <section className={`${styles.editorView} ${isQuickEditing ? styles.isFocused : ''}`}>
           <div className={styles.editorHeader}>
             <div className={styles.editorHeaderLeft}>
-              <button className={styles.editorBackBtn} onClick={() => requestViewChange("library")}>← Back</button>
+              <button className={styles.editorBackBtn} onClick={() => requestViewChange("library")}>
+                <Icon name="ChevronLeft" size={16} /> Library
+              </button>
               <div className={styles.editorTitle}>{editingPack.title}</div>
               <div className={styles.editorHistoryCtrls}>
                 <button 
@@ -1098,13 +1150,17 @@ export default function Home() {
                   onClick={handleUndo} 
                   disabled={editorHistoryIdx <= 0}
                   title="Undo (⌘Z)"
-                >⟲</button>
+                >
+                  <Icon name="Undo2" size={16} color={editorHistoryIdx > 0 ? "#60a5fa" : "var(--text-3)"} />
+                </button>
                 <button 
                   className={styles.historyBtn} 
                   onClick={handleRedo} 
                   disabled={editorHistoryIdx >= editorHistory.length - 1}
                   title="Redo (⌘⇧Z)"
-                >⟳</button>
+                >
+                  <Icon name="Redo2" size={16} color={editorHistoryIdx < editorHistory.length - 1 ? "#60a5fa" : "var(--text-3)"} />
+                </button>
               </div>
             </div>
             <div className={styles.editorControls}>
@@ -1123,7 +1179,7 @@ export default function Home() {
               <button className={styles.editorExportBtn} onClick={() => {
                 handleExportPack(editingPack);
               }}>
-                {exportQueue.length > 0 ? `Exporting (${exportQueue.length})` : 'Export Pack'}
+                <Icon name="Download" size={16} color="var(--amber-on)" /> {exportQueue.length > 0 ? `Exporting (${exportQueue.length})` : 'Export Pack'}
               </button>
             </div>
           </div>
@@ -1143,7 +1199,7 @@ export default function Home() {
                   </div>
                 ))}
                 <label className={styles.addThumbBtn}>
-                  <span style={{ fontSize: '1.2rem' }}>＋</span>
+                  <Icon name="Plus" size={20} strokeWidth={2.5} color="#fbbf24" />
                   <span>Add</span>
                   <input 
                     type="file" 
@@ -1174,13 +1230,13 @@ export default function Home() {
                     className={styles.navArrowLeft} 
                     onClick={() => setEditorIdx(prev => prev > 0 ? prev - 1 : editingPack.images.length - 1)}
                   >
-                    ‹
+                    <Icon name="ChevronLeft" size={24} />
                   </button>
                   <button 
                     className={styles.navArrowRight} 
                     onClick={() => setEditorIdx(prev => (prev + 1) % editingPack.images.length)}
                   >
-                    ›
+                    <Icon name="ChevronRight" size={24} />
                   </button>
                 </>
               )}
@@ -1377,17 +1433,17 @@ export default function Home() {
                     setActiveOverlayIdx(currentImg.overlays.length - 1);
                     setIsQuickEditing(true);
                   }}>
-                    <span>＋</span>
+                    <Icon name="Plus" size={20} />
                     <span>Text</span>
                   </button>
                   <button className={styles.actionIconBtn} onClick={() => setIsCropping(true)}>
-                    <span>📐</span>
+                    <Icon name="Crop" size={20} color="#60a5fa" />
                     <span>Crop</span>
                   </button>
                   <button className={styles.actionIconBtn} onClick={() => {
                     setEditorIdx(prev => (prev + 1) % editingPack.images.length);
                   }}>
-                    <span>›</span>
+                    <Icon name="ChevronRight" size={20} color="#a1a1aa" />
                     <span>Next</span>
                   </button>
                 </div>
@@ -1434,12 +1490,10 @@ export default function Home() {
                   <div className={styles.sidebarSection}>
                     <div className={styles.sectionTitle}>Image Options</div>
                     <button className={styles.cropModeBtn} onClick={() => {
-                      // Reset temp states for cropper
-                      setCrop({ x: 0, y: 0 });
                       setZoom(1);
                       setIsCropping(true);
                     }}>
-                      📐 Edit Crop & Pan
+                      <Icon name="Crop" size={14} style={{ marginRight: '6px' }} color="#60a5fa" /> Edit Crop & Pan
                     </button>
                   </div>
                   <div className={styles.sidebarSection}>
@@ -1451,7 +1505,7 @@ export default function Home() {
                       const nextImages = [...editingPack.images];
                       nextImages[editorIdx].overlays = nextImages[editorIdx].overlays.filter((_, i) => i !== idx);
                       commitToHistory({ ...editingPack, images: nextImages });
-                    }}>✕</button>
+                    }}><Icon name="X" size={12} color="#ef4444" /></button>
                     <textarea 
                       className={styles.overlayTextarea}
                       value={ov.text}
@@ -1491,27 +1545,9 @@ export default function Home() {
                             commitToHistory({ ...editingPack, images: nextImages });
                           }}
                         >
-                          {a === 'left' && (
-                            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
-                              <rect width="16" height="2" rx="1"/>
-                              <rect y="5" width="10" height="2" rx="1"/>
-                              <rect y="10" width="16" height="2" rx="1"/>
-                            </svg>
-                          )}
-                          {a === 'center' && (
-                            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
-                              <rect x="0" width="16" height="2" rx="1"/>
-                              <rect x="3" y="5" width="10" height="2" rx="1"/>
-                              <rect x="0" y="10" width="16" height="2" rx="1"/>
-                            </svg>
-                          )}
-                          {a === 'right' && (
-                            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
-                              <rect width="16" height="2" rx="1"/>
-                              <rect x="6" y="5" width="10" height="2" rx="1"/>
-                              <rect width="16" height="2" rx="1" y="10"/>
-                            </svg>
-                          )}
+                          {a === 'left' && <Icon name="AlignLeft" size={14} />}
+                          {a === 'center' && <Icon name="AlignCenter" size={14} />}
+                          {a === 'right' && <Icon name="AlignRight" size={14} />}
                         </button>
                       ))}
                     </div>
@@ -1591,7 +1627,7 @@ export default function Home() {
                   }];
                   commitToHistory({...editingPack, images: nextImages});
                 }}>
-                  <span style={{ fontSize: '18px' }}>＋</span> Add Text Layer
+                  <Icon name="Plus" size={18} color="#fbbf24" /> Add Text Layer
                 </button>
               </div>
                 </>
@@ -1795,7 +1831,9 @@ export default function Home() {
                   setDownloadChoicePack(null);
                 }}
               >
-                <span className={styles.choiceIcon}>✨</span>
+                <span className={styles.choiceIcon}>
+                  <Icon name="Sparkles" size={24} color="#fbbf24" fill="#fbbf24" />
+                </span>
                 <div className={styles.choiceBtnLabel}>With Captions</div>
                 <div className={styles.choiceBtnDesc}>Ready for TikTok/Reels</div>
               </button>
@@ -1806,7 +1844,9 @@ export default function Home() {
                   setDownloadChoicePack(null);
                 }}
               >
-                <span className={styles.choiceIcon}>🖼️</span>
+                <span className={styles.choiceIcon}>
+                  <Icon name="Image" size={24} color="#60a5fa" />
+                </span>
                 <div className={styles.choiceBtnLabel}>Without Captions</div>
                 <div className={styles.choiceBtnDesc}>Clean images only</div>
               </button>
@@ -1827,7 +1867,7 @@ export default function Home() {
               setIsQuickEditing(false);
               setActiveOverlayIdx(null);
             }}>
-              🗑️
+              <Icon name="Trash2" size={20} color="#ef4444" />
             </button>
 
             <div className={styles.quickEditHeaderCenter}>
@@ -1836,7 +1876,7 @@ export default function Home() {
                 className={`${styles.quickToolBtn} ${activeQuickTool === 'fonts' ? styles.quickToolBtnActive : ''}`}
                 onClick={() => setActiveQuickTool('fonts')}
               >
-                <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>A</span>
+                <Icon name="Type" size={22} color={activeQuickTool === 'fonts' ? '#fbbf24' : '#fff'} />
               </button>
 
               {/* Color Tool */}
@@ -1870,8 +1910,8 @@ export default function Home() {
                   background: editingPack.images[editorIdx].overlays[activeOverlayIdx].bgMode === 'solid' ? 'white' : 'transparent'
                 }}>
                   <span style={{ 
-                    color: editingPack.images[editorIdx].overlays[activeOverlayIdx].bgMode === 'solid' ? 'black' : 'white',
-                    fontSize: '0.7rem',
+                    color: editingPack.images[editorIdx].overlays[activeOverlayIdx].bgMode === 'solid' ? 'black' : (editingPack.images[editorIdx].overlays[activeOverlayIdx].bgMode === 'outline' ? '#fbbf24' : 'white'),
+                    fontSize: '0.75rem',
                     fontWeight: 900
                   }}>A</span>
                 </div>
@@ -1889,10 +1929,10 @@ export default function Home() {
                   setEditingPack(prev => ({ ...prev, images: nextImages }));
                 }}
               >
-                <div style={{ transform: 'scale(1.2)' }}>
-                  {editingPack.images[editorIdx].overlays[activeOverlayIdx].align === 'left' && '≣'}
-                  {(editingPack.images[editorIdx].overlays[activeOverlayIdx].align === 'center' || !editingPack.images[editorIdx].overlays[activeOverlayIdx].align) && '≡'}
-                  {editingPack.images[editorIdx].overlays[activeOverlayIdx].align === 'right' && '≣'}
+                <div style={{ transform: 'scale(1.2)', display: 'flex', alignItems: 'center' }}>
+                  {(editingPack.images[editorIdx].overlays[activeOverlayIdx].align === 'left') && <Icon name="AlignLeft" size={16} color="#fbbf24" />}
+                  {(editingPack.images[editorIdx].overlays[activeOverlayIdx].align === 'center' || !editingPack.images[editorIdx].overlays[activeOverlayIdx].align) && <Icon name="AlignCenter" size={16} color="#fbbf24" />}
+                  {(editingPack.images[editorIdx].overlays[activeOverlayIdx].align === 'right') && <Icon name="AlignRight" size={16} color="#fbbf24" />}
                 </div>
               </button>
             </div>
