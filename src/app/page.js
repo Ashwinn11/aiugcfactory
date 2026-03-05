@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { toPng } from "html-to-image";
+import Cropper from 'react-easy-crop';
 import styles from "./page.module.css";
 
 /* ─── Mode Configs ───────────────────────────────────────── */
@@ -106,6 +107,11 @@ export default function Home() {
     type: null, // "view", "mode", "fresh"
     next: null 
   });
+
+  const [downloadChoicePack, setDownloadChoicePack] = useState(null);
+  const [isCropping, setIsCropping] = useState(false);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
 
   const hasUnsavedChanges = useCallback(() => {
     if (view === "editor") return editorHistoryIdx > 0;
@@ -438,9 +444,14 @@ export default function Home() {
     }
   }, []);
 
-  const handleExportPack = useCallback((pack) => {
+  const handleExportPack = useCallback((pack, options = {}) => {
     if (!pack?.images) return;
-    setExportQueue(pack.images.map(img => ({ ...img, aspectRatio: pack.aspectRatio })));
+    const { skipOverlays = false } = options;
+    setExportQueue(pack.images.map(img => ({ 
+      ...img, 
+      aspectRatio: pack.aspectRatio,
+      overlays: skipOverlays ? [] : img.overlays 
+    })));
   }, []);
 
   useEffect(() => {
@@ -958,39 +969,58 @@ export default function Home() {
             <div className={styles.savedGrid}>
               {packs.map((pack) => (
                 <div key={pack.id} className={styles.savedCard}>
-                  <div className={styles.savedImageWrapper}>
-                    <div className={styles.savedImageWrapper} style={{ 
-                      aspectRatio: pack.aspectRatio ? pack.aspectRatio.replace(':', '/') : '9/16',
-                      width: '100%'
-                    }}>
-                      {pack.images.length > 0 && (
-                        <img src={pack.images[0].image} alt="Pack cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      )}
-                      <div className={styles.savedOverlay}>
-                        {pack.images[0]?.overlays?.map((ov, idx) => {
-                          const isSolid = ov.bgMode === 'solid';
-                          const selectedColor = ov.color || "#ffffff";
-                          const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
-                          const bgColor = isSolid ? selectedColor : 'transparent';
-                          const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
-                          
-                          // Use cqw (container query width) for text scaling
-                          const scaleRatio = (ov.size || 30) / 30;
-                          const fontCqw = ((ov.fontSize || 24) / 540) * 100 * scaleRatio;
-                          
-                          return (
-                            <div key={idx} className={styles.textOverlay} style={{
-                              position: "absolute",
-                              left: `${ov.x}%`,
-                              top: `${ov.y}%`,
-                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
-                              fontSize: `${fontCqw}cqw`,
-                            }}>
-                              <span style={{ color: textColor, backgroundColor: bgColor }}>{ov.text}</span>
+                  <div className={styles.savedImageWrapper} style={{ 
+                    aspectRatio: pack.aspectRatio ? pack.aspectRatio.replace(':', '/') : '9/16',
+                    width: '100%'
+                  }}>
+                    {pack.images.length > 0 && (
+                      <img src={pack.images[0].image} alt="Pack cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
+                    <div className={styles.savedOverlay}>
+                      {pack.images[0]?.overlays?.map((ov, idx) => {
+                        const isSolid = ov.bgMode === 'solid';
+                        const isOutline = ov.bgMode === 'outline';
+                        const selectedColor = ov.color || "#ffffff";
+                        const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
+                        const bgColor = isSolid ? selectedColor : 'transparent';
+                        const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
+                        const outlineColor = isLight ? '#000000' : '#ffffff';
+                        const outlineShadow = isOutline ? `
+                          1px 1px 0 ${outlineColor}, -1px -1px 0 ${outlineColor}, 
+                          1px -1px 0 ${outlineColor}, -1px 1px 0 ${outlineColor},
+                          0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
+                          1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor}
+                        ` : '';
+
+                        // Use cqw (container query width) for text scaling
+                        const scaleRatio = (ov.size || 30) / 30;
+                        const fontCqw = ((ov.fontSize || 24) / 540) * 100;
+                        
+                        return (
+                          <div key={idx} className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`} style={{
+                            position: "absolute",
+                            left: `${ov.x}%`,
+                            top: `${ov.y}%`,
+                            transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${scaleRatio})`,
+                            fontSize: `${fontCqw}cqw`,
+                          }}>
+                            <div style={{ display: 'grid' }}>
+                              {isSolid && (
+                                <div style={{ gridArea: '1 / 1', zIndex: 0 }}>
+                                  <span className={styles.textInner} style={{ color: 'transparent', backgroundColor: bgColor }}>
+                                    {ov.text}
+                                  </span>
+                                </div>
+                              )}
+                              <div style={{ gridArea: '1 / 1', zIndex: 1 }}>
+                                <span className={styles.textInner} style={{ color: textColor || "white", backgroundColor: "transparent", textShadow: isOutline ? outlineShadow : undefined }}>
+                                  {ov.text}
+                                </span>
+                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className={styles.savedCardActions}>
@@ -1021,6 +1051,7 @@ export default function Home() {
                       setEditorIdx(0);
                       setView("editor");
                     }}>✎</button>
+                    <button className={styles.savedActionBtn} onClick={() => setDownloadChoicePack(pack)}>↓</button>
                     <button className={styles.savedActionBtn} style={{ background: "rgba(239, 68, 68, 0.6)" }} onClick={() => handleRemovePack(pack.id)}>✕</button>
                   </div>
                   <div className={styles.savedCardInfo}>
@@ -1143,98 +1174,137 @@ export default function Home() {
                 <div className={styles.canvasWrapperContainer}>
                   {editingPack.images[editorIdx] ? (
                     <>
-                      <img 
-                        src={editingPack.images[editorIdx].image} 
-                        alt="Editing" 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                      {editingPack.images[editorIdx].overlays?.map((ov, idx) => {
-                        const isSolid = ov.bgMode === 'solid';
-                        const isOutline = ov.bgMode === 'outline';
-                        const selectedColor = ov.color || "#ffffff";
-                        const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
-                        const bgColor = isSolid ? selectedColor : 'transparent';
-                        const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
-                        const outlineColor = isLight ? '#000000' : '#ffffff';
-                        const outlineShadow = isOutline ? `
-                          1px 1px 0 ${outlineColor}, -1px -1px 0 ${outlineColor}, 
-                          1px -1px 0 ${outlineColor}, -1px 1px 0 ${outlineColor},
-                          0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
-                          1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor},
-                          0.04em 0.04em 0.04em rgba(0,0,0,0.3)
-                        ` : '';
-                        
-                        // Responsive text scaling
-                        const scaleRatio = (ov.size || 30) / 30;
-                        const fontCqw = ((ov.fontSize || 24) / 540) * 100 * scaleRatio;
-
-                        return (
-                          <div 
-                            key={idx}
-                            className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`}
-                            style={{
-                              left: `${ov.x}%`,
-                              top: `${ov.y}%`,
-                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
-                              fontSize: `${fontCqw}cqw`,
-                              touchAction: 'none'
+                      {isCropping ? (
+                        <div className={styles.cropperContainer}>
+                          <Cropper
+                            image={editingPack.images[editorIdx].image}
+                            crop={crop}
+                            zoom={zoom}
+                            aspect={editingPack.aspectRatio === '3:4' ? 3/4 : 9/16}
+                            onCropChange={setCrop}
+                            onZoomChange={setZoom}
+                            onCropComplete={(croppedArea, croppedAreaPixels) => {
+                              // We'll store the results in a ref or local state to apply on "Save"
+                              editingPack.images[editorIdx]._tempCrop = croppedArea;
                             }}
-                            onPointerDown={(e) => {
-                              const startX = e.clientX;
-                              const startY = e.clientY;
-                              const startPosX = ov.x;
-                              const startPosY = ov.y;
-                              const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                              
-                              let latestPack = editingPack;
-                              
-                              const onPointerMove = (moveE) => {
-                                moveE.preventDefault();
-                                const deltaX = ((moveE.clientX - startX) / rect.width) * 100;
-                                const deltaY = ((moveE.clientY - startY) / rect.height) * 100;
-                                const nextImages = [...editingPack.images];
-                                const nextOverlays = [...(nextImages[editorIdx].overlays || [])];
-                                nextOverlays[idx] = {
-                                  ...nextOverlays[idx],
-                                  x: Math.max(0, Math.min(100, startPosX + deltaX)),
-                                  y: Math.max(0, Math.min(100, startPosY + deltaY))
-                                };
-                                nextImages[editorIdx].overlays = nextOverlays;
-                                latestPack = { ...editingPack, images: nextImages };
-                                setEditingPack(latestPack);
-                              };
-                              const onPointerUp = () => {
-                                window.removeEventListener("pointermove", onPointerMove);
-                                window.removeEventListener("pointerup", onPointerUp);
-                                window.removeEventListener("pointercancel", onPointerUp);
-                                commitToHistory(latestPack);
-                              };
-                              window.addEventListener("pointermove", onPointerMove, { passive: false });
-                              window.addEventListener("pointerup", onPointerUp);
-                              window.addEventListener("pointercancel", onPointerUp);
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <div 
+                            className={styles.imageCanvasLayer}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              overflow: 'hidden',
+                              position: 'relative'
                             }}
                           >
-                            <div style={{ display: 'grid' }}>
-                              {isSolid && (
-                                <div style={{ gridArea: '1 / 1', zIndex: 0 }}>
-                                  <span className={styles.textInner} style={{ color: 'transparent', backgroundColor: bgColor }}>
-                                    {ov.text}
-                                  </span>
-                                </div>
-                              )}
-                              <div style={{ gridArea: '1 / 1', zIndex: 1 }}>
-                                <span className={styles.textInner} style={{
-                                  color: textColor || "white",
-                                  backgroundColor: "transparent",
-                                  textShadow: isOutline ? outlineShadow : undefined,
-                                }}>
-                                  {ov.text}
-                                </span>
-                              </div>
-                            </div>
+                            <img 
+                              src={editingPack.images[editorIdx].image} 
+                              alt="Editing" 
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'cover',
+                                objectPosition: `${editingPack.images[editorIdx].offsetX ?? 50}% ${editingPack.images[editorIdx].offsetY ?? 50}%`,
+                                transform: `scale(${editingPack.images[editorIdx].zoom ?? 1})`,
+                                cursor: 'default',
+                                touchAction: 'none'
+                              }} 
+                            />
                           </div>
-                        );
-                      })}
+                          {editingPack.images[editorIdx].overlays?.map((ov, idx) => {
+                            const isSolid = ov.bgMode === 'solid';
+                            const isOutline = ov.bgMode === 'outline';
+                            const selectedColor = ov.color || "#ffffff";
+                            const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
+                            const bgColor = isSolid ? selectedColor : 'transparent';
+                            const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
+                            const outlineColor = isLight ? '#000000' : '#ffffff';
+                            const outlineShadow = isOutline ? `
+                              1px 1px 0 ${outlineColor}, -1px -1px 0 ${outlineColor}, 
+                              1px -1px 0 ${outlineColor}, -1px 1px 0 ${outlineColor},
+                              0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
+                              1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor},
+                              0.04em 0.04em 0.04em rgba(0,0,0,0.3)
+                            ` : '';
+                            
+                            // Responsive text scaling
+                            const scaleRatio = (ov.size || 30) / 30;
+                            const fontCqw = ((ov.fontSize || 24) / 540) * 100;
+
+                            return (
+                              <div 
+                                key={idx}
+                                className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`}
+                                style={{
+                                  left: `${ov.x}%`,
+                                  top: `${ov.y}%`,
+                                  transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${scaleRatio})`,
+                                  fontSize: `${fontCqw}cqw`,
+                                  touchAction: 'none',
+                                  pointerEvents: 'auto',
+                                  opacity: 1
+                                }}
+                                onPointerDown={(e) => {
+                                  const startX = e.clientX;
+                                  const startY = e.clientY;
+                                  const startPosX = ov.x;
+                                  const startPosY = ov.y;
+                                  const rect = e.currentTarget.parentElement.getBoundingClientRect();
+                                  
+                                  let latestPack = editingPack;
+                                  
+                                  const onPointerMove = (moveE) => {
+                                    moveE.preventDefault();
+                                    const deltaX = ((moveE.clientX - startX) / rect.width) * 100;
+                                    const deltaY = ((moveE.clientY - startY) / rect.height) * 100;
+                                    const nextImages = [...editingPack.images];
+                                    const nextOverlays = [...(nextImages[editorIdx].overlays || [])];
+                                    nextOverlays[idx] = {
+                                      ...nextOverlays[idx],
+                                      x: Math.max(0, Math.min(100, startPosX + deltaX)),
+                                      y: Math.max(0, Math.min(100, startPosY + deltaY))
+                                    };
+                                    nextImages[editorIdx].overlays = nextOverlays;
+                                    latestPack = { ...editingPack, images: nextImages };
+                                    setEditingPack(latestPack);
+                                  };
+                                  const onPointerUp = () => {
+                                    window.removeEventListener("pointermove", onPointerMove);
+                                    window.removeEventListener("pointerup", onPointerUp);
+                                    window.removeEventListener("pointercancel", onPointerUp);
+                                    commitToHistory(latestPack);
+                                  };
+                                  window.addEventListener("pointermove", onPointerMove, { passive: false });
+                                  window.addEventListener("pointerup", onPointerUp);
+                                  window.addEventListener("pointercancel", onPointerUp);
+                                }}
+                              >
+                                <div style={{ display: 'grid' }}>
+                                  {isSolid && (
+                                    <div style={{ gridArea: '1 / 1', zIndex: 0 }}>
+                                      <span className={styles.textInner} style={{ color: 'transparent', backgroundColor: bgColor }}>
+                                        {ov.text}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div style={{ gridArea: '1 / 1', zIndex: 1 }}>
+                                    <span className={styles.textInner} style={{
+                                      color: textColor || "white",
+                                      backgroundColor: "transparent",
+                                      textShadow: isOutline ? outlineShadow : undefined,
+                                    }}>
+                                      {ov.text}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
                     </>
                   ) : (
                     <div className={styles.emptyCanvas}>
@@ -1246,8 +1316,21 @@ export default function Home() {
             </div>
 
             <div className={styles.editorSidebar}>
-              <div className={styles.sidebarSection}>
-                <div className={styles.sectionTitle}>Slide #{editorIdx + 1} Overlays</div>
+              {!isCropping ? (
+                <>
+                  <div className={styles.sidebarSection}>
+                    <div className={styles.sectionTitle}>Image Options</div>
+                    <button className={styles.cropModeBtn} onClick={() => {
+                      // Reset temp states for cropper
+                      setCrop({ x: 0, y: 0 });
+                      setZoom(1);
+                      setIsCropping(true);
+                    }}>
+                      📐 Edit Crop & Pan
+                    </button>
+                  </div>
+                  <div className={styles.sidebarSection}>
+                    <div className={styles.sectionTitle}>Slide #{editorIdx + 1} Overlays</div>
                 
                 {editingPack.images[editorIdx]?.overlays?.map((ov, idx) => (
                   <div key={idx} className={styles.overlayItem}>
@@ -1398,6 +1481,78 @@ export default function Home() {
                   <span style={{ fontSize: '18px' }}>＋</span> Add Text Layer
                 </button>
               </div>
+                </>
+              ) : (
+                <div className={styles.sidebarSection}>
+                  <div className={styles.sectionTitle}>Crop Mode Active</div>
+                  <div className={styles.cropInstructionCard}>
+                    <p style={{ fontSize: '13px', color: '#999', marginBottom: '16px' }}>Drag photo to pan. Use slider to zoom.</p>
+                    
+                    <div className={styles.cropPresetsHeader}>Quick Align</div>
+                    <div className={styles.cropPresetsGrid}>
+                      <button className={styles.presetBtn} onClick={() => {
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx] = { ...nextImages[editorIdx], offsetY: 0 };
+                        commitToHistory({...editingPack, images: nextImages});
+                      }}>Keep Top</button>
+                      <button className={styles.presetBtn} onClick={() => {
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx] = { ...nextImages[editorIdx], offsetY: 100 };
+                        commitToHistory({...editingPack, images: nextImages});
+                      }}>Keep Bottom</button>
+                      <button className={styles.presetBtn} onClick={() => {
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx] = { ...nextImages[editorIdx], offsetX: 0 };
+                        commitToHistory({...editingPack, images: nextImages});
+                      }}>Keep Left</button>
+                      <button className={styles.presetBtn} onClick={() => {
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx] = { ...nextImages[editorIdx], offsetX: 100 };
+                        commitToHistory({...editingPack, images: nextImages});
+                      }}>Keep Right</button>
+                    </div>
+
+                    <div className={styles.rangeItem} style={{ marginTop: '20px' }}>
+                      <div className={styles.rangeLabel}>Zoom Level</div>
+                      <input type="range" min="1" max="3" step="0.01" value={editingPack.images[editorIdx]?.zoom ?? 1} onChange={(e) => {
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx].zoom = parseFloat(e.target.value);
+                        setEditingPack(prev => ({ ...prev, images: nextImages }));
+                      }} onMouseUp={() => commitToHistory(editingPack)} />
+                      <div style={{ textAlign: 'center', fontSize: '12px', marginTop: '4px', color: 'var(--amber-400)' }}>{Math.round((editingPack.images[editorIdx]?.zoom ?? 1) * 100)}%</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+                      <button className={styles.cropResetBtn} style={{ flex: 1 }} onClick={() => {
+                        setCrop({ x: 0, y: 0 });
+                        setZoom(1);
+                        const nextImages = [...editingPack.images];
+                        nextImages[editorIdx] = { ...nextImages[editorIdx], zoom: 1, offsetX: 50, offsetY: 50 };
+                        commitToHistory({...editingPack, images: nextImages});
+                      }}>Reset</button>
+                      <button className={styles.cropDoneBtn} style={{ flex: 2 }} onClick={() => {
+                        const temp = editingPack.images[editorIdx]._tempCrop;
+                        if (temp) {
+                          const nextImages = [...editingPack.images];
+                          // The center of the crop box is where objectPosition should point
+                          const offX = temp.x + temp.width / 2;
+                          const offY = temp.y + temp.height / 2;
+                          // The scale is inverse of the width fraction (if assuming same aspect)
+                          const calculatedZoom = 100 / temp.width;
+                          
+                          nextImages[editorIdx] = { 
+                            ...nextImages[editorIdx], 
+                            offsetX: offX, 
+                            offsetY: offY, 
+                            zoom: calculatedZoom 
+                          };
+                          commitToHistory({...editingPack, images: nextImages});
+                        }
+                        setIsCropping(false);
+                      }}>Save Crop</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -1454,7 +1609,13 @@ export default function Home() {
             <img 
               src={exportingPost.image} 
               alt="Exporting" 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                objectPosition: `${exportingPost.offsetX ?? 50}% ${exportingPost.offsetY ?? 50}%`,
+                transform: `scale(${exportingPost.zoom ?? 1})`
+              }} 
             />
             <div className={styles.savedOverlay}>
               {exportingPost.overlays?.map((ov, idx) => {
@@ -1473,14 +1634,14 @@ export default function Home() {
                 ` : '';
                 // Responsive text scaling to emulate exact Canvas editor sizes
                 const scaleRatio = (ov.size || 30) / 30;
-                const fontCqw = ((ov.fontSize || 24) / 540) * 100 * scaleRatio;
+                const fontCqw = ((ov.fontSize || 24) / 540) * 100;
 
                 return (
                   <div key={idx} className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`} style={{
                     position: "absolute",
                     left: `${ov.x}%`,
                     top: `${ov.y}%`,
-                    transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
+                    transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${scaleRatio})`,
                     fontSize: `${fontCqw}cqw`, 
                   }}>
                     <div style={{ display: 'grid' }}>
@@ -1501,6 +1662,43 @@ export default function Home() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ DOWNLOAD CHOICE MODAL ═══ */}
+      {downloadChoicePack && (
+        <div className={styles.modalOverlay} onClick={() => setDownloadChoicePack(null)}>
+          <div className={styles.downloadChoiceContent} onClick={e => e.stopPropagation()}>
+            <div className={styles.choiceHeader}>
+              <div className={styles.choiceTitle}>Download Pack</div>
+              <div className={styles.choiceDesc}>Choose your export style</div>
+            </div>
+            <div className={styles.choiceButtons}>
+              <button 
+                className={styles.choiceBtn} 
+                onClick={() => {
+                  handleExportPack(downloadChoicePack, { skipOverlays: false });
+                  setDownloadChoicePack(null);
+                }}
+              >
+                <span className={styles.choiceIcon}>✨</span>
+                <div className={styles.choiceBtnLabel}>With Captions</div>
+                <div className={styles.choiceBtnDesc}>Ready for TikTok/Reels</div>
+              </button>
+              <button 
+                className={styles.choiceBtn} 
+                onClick={() => {
+                  handleExportPack(downloadChoicePack, { skipOverlays: true });
+                  setDownloadChoicePack(null);
+                }}
+              >
+                <span className={styles.choiceIcon}>🖼️</span>
+                <div className={styles.choiceBtnLabel}>Without Captions</div>
+                <div className={styles.choiceBtnDesc}>Clean images only</div>
+              </button>
+            </div>
+            <button className={styles.choiceClose} onClick={() => setDownloadChoicePack(null)}>Cancel</button>
           </div>
         </div>
       )}
