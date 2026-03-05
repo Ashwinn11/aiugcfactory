@@ -382,6 +382,9 @@ export default function Home() {
       setPlanning(false);
       setGenerating(true);
       setSelectedIdx(0);
+      
+      // Give React a frame to paint the "Generating" UI before the next await
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       const genRes = await fetch("/api/generate", {
         method: "POST",
@@ -818,8 +821,12 @@ export default function Home() {
                   ))}
                 </div>
               </section>
+            </>
+          )}
 
-              {/* ═══ Plan Button ═══ */}
+          {/* ═══ Plan Button & Loading (Always visible during generation) ═══ */}
+          {!result && (
+            <>
               <section className={styles.generateSection}>
                 <button
                   className={styles.generateBtn}

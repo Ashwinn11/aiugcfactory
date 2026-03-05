@@ -128,6 +128,8 @@ export async function POST(request) {
           return {
             image: `data:${imagePart.inlineData.mimeType || "image/png"};base64,${imagePart.inlineData.data}`,
             caption: scene.caption || "",
+            scene_prompt: scene.prompt || "",
+            camera: scene.camera || "",
             timestamp: Date.now() + index,
           };
         } catch (err) {
