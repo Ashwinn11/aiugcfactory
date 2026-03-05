@@ -16,7 +16,7 @@ function getPhotoPrompt() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { scenes, mode = "photodump", avatar, productImage, aspectRatio = "9:16" } = body;
+    const { scenes, mode = "photodump", avatar, productImage, aspectRatio = "9:16", styling } = body;
 
     if (!Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json({ error: "No scenes provided." }, { status: 400 });
@@ -43,12 +43,60 @@ export async function POST(request) {
           contents.push({ inlineData: { data: productImage.base64, mimeType: productImage.mimeType || "image/png" } });
         }
 
-        // Add a face avoidance rule for POV shots to prevent unwanted face renders
-        const faceAvoidance = scene.requires_avatar === false ? " (DO NOT show this person's face, only their perspective/view)" : "";
+        // Build JSON-structured prompt for the image model
+        const sp = scene.scene_prompt || {};
+        const outfit = sp.outfit || (styling && styling.outfit) || "";
+        const hair = (styling && styling.hair) || "";
 
-        // Final prompt building
-        const cameraPrefix = scene.camera ? `${scene.camera.replace(/_/g, " ")}: ` : "";
-        const finalPrompt = `${cameraPrefix}${scene.prompt}${faceAvoidance}\n\n${photoPrompt}`;
+        // Camera-specific pose_and_action
+        const poseByCamera = {
+          selfie: {
+            perspective: "Close-up front-facing shot, slightly from below, one arm visibly extended toward camera",
+            phone_hand: "Right hand extended forward holding phone (arm partially visible at bottom edge of frame)",
+            free_hand: sp.free_hand || "relaxed at side",
+            face_visible: true
+          },
+          mirror_selfie: {
+            perspective: "Reflected in a mirror, phone visible in one hand, full or half body visible in reflection",
+            phone_hand: "One hand holding phone, visible in the mirror reflection",
+            free_hand: sp.free_hand || "relaxed at side",
+            face_visible: true
+          },
+          pov: {
+            perspective: "First-person point of view looking down, shot from eye level, NO face visible at all",
+            phone_hand: "One hand holds the phone (completely out of frame, not visible)",
+            free_hand: sp.free_hand || "resting on surface",
+            face_visible: false
+          },
+          backcamera: {
+            perspective: "Full or half body shot from a few feet away, as if taken by a friend or timer",
+            phone_hand: "No phone in hands",
+            free_hand: sp.free_hand || "both hands free, natural pose",
+            face_visible: true
+          },
+        };
+
+        const jsonPrompt = {
+          subject: {
+            identity: "this person (use the reference photo provided)",
+            facial_expression: sp.expression || "natural",
+            skin_texture: "Natural, realistic skin with visible pores and texture, matte finish, no airbrushing"
+          },
+          apparel: {
+            outfit: outfit || "casual, contextually appropriate clothing",
+            hair: hair || "natural"
+          },
+          pose_and_action: poseByCamera[scene.camera] || poseByCamera.backcamera,
+          environment: {
+            location: sp.environment || "contextually appropriate setting",
+            key_item: sp.key_item || ""
+          }
+        };
+
+        // Remove empty key_item to keep prompt clean
+        if (!jsonPrompt.environment.key_item) delete jsonPrompt.environment.key_item;
+
+        const finalPrompt = `Generate a photo matching this description:\n${JSON.stringify(jsonPrompt, null, 2)}\n\n${photoPrompt}`;
         contents.push(finalPrompt);
 
         try {

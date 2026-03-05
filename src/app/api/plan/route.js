@@ -60,43 +60,55 @@ Frame 5 — CTA: Confident closing shot. "Link in bio" energy. Product optional.
 
 CAMERA VARIETY: Use at least 3 different camera types across the 5 scenes. Must include at least one "selfie".
 
-For each scene, write:
-- "prompt": A SHORT, minimal description of the scene and action ONLY (max 15 words). Always refer to the creator as "this person". NEVER mention the camera mode in the prompt (no "taking a selfie", no "mirror selfie", no "POV shot"). The camera field handles perspective separately.
-- "caption": A punchy 1-line Instagram caption with emoji.
-- "camera": One of "selfie", "mirror_selfie", "backcamera", "pov".
-- "requires_avatar": true if the person's face should be visible, false for hands-only/POV shots.
-- "requires_product": true if the product is featured.
+${mode !== "photodump" 
+    ? `OUTFIT CONSISTENCY: Since this is ONE story, generate a "styling" object that applies to ALL 5 scenes:
+- "outfit": What the person is wearing (e.g., "oversized white tee, high-waisted blue jeans, white sneakers")
+- "hair": Hair style for the story (e.g., "messy bun with loose strands")`
+    : `OUTFIT VARIETY: Since this is a photo dump (different moments), each scene can have a different outfit.`}
 
-PROMPT EXAMPLES:
-- GOOD: "this person rubbing their eyes in a dark bedroom"
-- GOOD: "this person's hand holding a coffee cup at a cafe table"
-- BAD: "this person taking a selfie while rubbing their eyes"
-- BAD: "A candid back camera photo of this person in a coffee shop"
+Output a JSON object with:
+${mode !== "photodump" ? `- "styling": { "outfit": "...", "hair": "..." } (shared across all scenes)` : ""}
+- "scenes": An array of exactly 5 scene objects, each with:
+  - "scene_prompt": An object describing the scene:
+    - "expression": Facial expression (e.g., "frustrated frown", "big confident smile"). Empty string if POV.
+    - "pose": Body angle and action (e.g., "looking down at hands", "standing with arms crossed", "leaning against a wall").
+    - "free_hand": What the ONE visible free hand is doing. For backcamera, describe BOTH hands.
+    - "environment": Specific setting (e.g., "messy bathroom vanity with products scattered", "bright kitchen counter near a window").
+    - "key_item": Main product/object in frame. Empty string if none.
+    ${mode === "photodump" ? `- "outfit": What the person is wearing in this scene.` : ""}
+  - "caption": A punchy 1-line Instagram caption with emoji.
+  - "camera": One of "selfie", "mirror_selfie", "backcamera", "pov".
+  - "requires_avatar": true if face visible, false for hands-only/POV.
+  - "requires_product": true if the product is featured.
 
-Output a JSON array of exactly 5 objects.`;
+RULES FOR "free_hand":
+- selfie/mirror_selfie/pov: Describe ONLY ONE hand. The other hand holds the phone and is INVISIBLE.
+- backcamera: Describe what BOTH hands are doing. This is the only mode for two-handed actions.`;
 }
 
 // ═══ PHASE 2: VALIDATOR (Enforces physical rules, fixes issues) ═══
 async function validateScenes(ai, scenes) {
-  const validatorPrompt = `You are a "Physical Reality Checker" for AI-generated photo prompts.
+  const validatorPrompt = `You are a "Physical Reality Checker" for AI-generated photo scene plans.
+
+Each scene has a "scene_prompt" object with: expression, free_hand, environment, key_item.
 
 RULES (The One Creator Principle):
 - The creator films EVERYTHING themselves with ONE phone and TWO hands.
-- "selfie": One hand holds the phone. ONE hand free. Face visible. Best for: reactions, expressions, simple gestures. requires_avatar MUST be true.
-- "mirror_selfie": One hand holds the phone, reflected in mirror. ONE hand free. Face visible. Best for: outfit checks, simple poses. requires_avatar MUST be true.
-- "pov": One hand holds the phone, shot from the eyes. ONE hand free. NO face visible. Best for: looking at one item, holding one thing. requires_avatar MUST be false.
-- "backcamera": Phone is NOT in the creator's hands. BOTH hands free. Face visible. Best for: actions, applying products, holding multiple items, posing. requires_avatar MUST be true.
+- "selfie": ONE hand free. Face visible. requires_avatar MUST be true.
+- "mirror_selfie": ONE hand free. Face visible in reflection. requires_avatar MUST be true. The "environment" should include "mirror".
+- "pov": ONE hand free. NO face. requires_avatar MUST be false. "expression" should be empty.
+- "backcamera": BOTH hands free. Face visible. requires_avatar MUST be true.
 
 VALIDATION CHECKS:
-1. If a prompt describes ONLY hands, a screen, or a product close-up with NO face/person reaction → camera MUST be "pov". But if the person is also reacting to or discovering the product (face visible), keep the original camera.
-2. If a prompt describes a TWO-HANDED action (applying product, using a tool, holding something with both hands) → camera MUST be "backcamera".
-3. If camera is "pov" but requires_avatar is true → Fix: set requires_avatar to false.
-4. If camera is "selfie" or "mirror_selfie" but requires_avatar is false → Fix: set requires_avatar to true.
-5. If camera is "pov", "selfie", or "mirror_selfie", only ONE hand is free. Fix any prompt that implies both hands are in use.
-6. CAMERA DIVERSITY: The 5 scenes should use at least 3 different camera types and include at least one "selfie". If no selfie exists, convert the most suitable scene to a selfie.
-7. Ensure prompts don't describe physically impossible actions for the chosen camera mode.
+1. If "environment" mentions "mirror" or "reflection" → camera MUST be "mirror_selfie".
+2. If "free_hand" describes TWO hands or a two-handed action (e.g., "both hands holding", "applying with dropper", "opening a box") → camera MUST be "backcamera" and "free_hand" should describe BOTH hands.
+3. If camera is "selfie", "mirror_selfie", or "pov" → "free_hand" must describe only ONE hand's action. Remove any reference to a second hand.
+4. If camera is "pov" → requires_avatar MUST be false, "expression" should be empty.
+5. If camera is "selfie" or "mirror_selfie" → requires_avatar MUST be true.
+6. CAMERA DIVERSITY: Use at least 3 different camera types across 5 scenes. Must include at least one "selfie".
+7. When changing a camera mode, adapt scene_prompt fields to match.
 
-Review and fix these scenes. Return the corrected JSON array. If a scene is fine, return it unchanged.
+Review and fix these scenes. Return the corrected JSON array with the same structure.
 
 SCENES:
 ${JSON.stringify(scenes, null, 2)}`;
@@ -155,22 +167,33 @@ export async function POST(request) {
     });
 
     let scenes = [];
+    let styling = null;
     try {
-      scenes = JSON.parse(res.text?.trim() || "[]");
+      const parsed = JSON.parse(res.text?.trim() || "{}");
+      // Handle both { scenes: [...] } and flat array formats
+      if (parsed.scenes && Array.isArray(parsed.scenes)) {
+        scenes = parsed.scenes;
+        styling = parsed.styling || null;
+      } else if (Array.isArray(parsed)) {
+        scenes = parsed;
+      } else {
+        return NextResponse.json({ error: "Unexpected response format. Try again." }, { status: 500 });
+      }
     } catch {
       return NextResponse.json({ error: "Failed to parse scenes. Try again." }, { status: 500 });
     }
 
-    if (!Array.isArray(scenes) || scenes.length < 3) {
+    if (scenes.length < 3) {
       return NextResponse.json({ error: `Got ${scenes.length} scenes instead of 5.` }, { status: 500 });
     }
 
     // Phase 2: Validate & fix scenes
+    console.log("Styling:", JSON.stringify(styling, null, 2));
     console.log("Raw scenes:", JSON.stringify(scenes, null, 2));
     const validatedScenes = await validateScenes(ai, scenes);
     console.log("Validated scenes:", JSON.stringify(validatedScenes, null, 2));
 
-    return NextResponse.json({ scenes: validatedScenes, vibe: vibe.trim(), mode, personDescription, productDescription });
+    return NextResponse.json({ scenes: validatedScenes, styling, vibe: vibe.trim(), mode, personDescription, productDescription });
   } catch (err) {
     console.error("Plan error:", err.message);
     return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });

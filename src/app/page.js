@@ -78,6 +78,7 @@ export default function Home() {
   // Planning
   const [planning, setPlanning] = useState(false);
   const [plannedScenes, setPlannedScenes] = useState(null);
+  const [plannedStyling, setPlannedStyling] = useState(null);
   const [selectedSceneIds, setSelectedSceneIds] = useState(new Set());
 
   // Generation
@@ -128,6 +129,7 @@ export default function Home() {
   const handleStartFresh = useCallback(() => {
     setVibe("");
     setPlannedScenes(null);
+    setPlannedStyling(null);
     setResult(null);
     setSelectedSceneIds(new Set());
     setProductImage(null);
@@ -350,6 +352,7 @@ export default function Home() {
     setPlanning(true);
     setError(null);
     setPlannedScenes(null);
+    setPlannedStyling(null);
     setSelectedSceneIds(new Set());
     setResult(null);
 
@@ -372,6 +375,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "Planning failed");
 
       setPlannedScenes(data.scenes);
+      setPlannedStyling(data.styling || null);
       // Auto-select all scenes
       const autoSelected = new Set();
       data.scenes.forEach((_, i) => autoSelected.add(i));
@@ -430,6 +434,7 @@ export default function Home() {
               ? { base64: productImage.base64, mimeType: productImage.mimeType }
               : undefined,
           aspectRatio: genAspectRatio,
+          styling: plannedStyling || undefined,
         }),
       });
 
@@ -861,6 +866,20 @@ export default function Home() {
                 <p className={styles.vibeHint} style={{ marginBottom: "1rem" }}>
                   {plannedScenes.length} scenes ready. Deselect any you want to skip. ({selectedSceneIds.size}/{plannedScenes.length} selected)
                 </p>
+                {plannedStyling && (
+                  <div style={{
+                    background: "linear-gradient(135deg, #1a1a2e, #16213e)", border: "1px solid #334",
+                    padding: "0.75rem 1rem", borderRadius: "8px", marginBottom: "1rem",
+                    display: "flex", gap: "1.5rem", fontSize: "0.85rem",
+                  }}>
+                    {plannedStyling.outfit && (
+                      <div><span style={{ color: "#888" }}>👗 Outfit:</span> <span style={{ color: "#ccc" }}>{plannedStyling.outfit}</span></div>
+                    )}
+                    {plannedStyling.hair && (
+                      <div><span style={{ color: "#888" }}>💇 Hair:</span> <span style={{ color: "#ccc" }}>{plannedStyling.hair}</span></div>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   {plannedScenes.map((scene, i) => {
                     const isSelected = selectedSceneIds.has(i);
@@ -915,17 +934,34 @@ export default function Home() {
                         <div style={{ fontSize: "0.95rem", color: "#ddd", fontStyle: "italic" }}>
                           {scene.caption}
                         </div>
-                        <textarea
-                          value={scene.prompt}
-                          onChange={(e) => { e.stopPropagation(); updatePlannedScene(i, 'prompt', e.target.value); }}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{
-                            background: "#1a1a1a", color: "#ccc", border: "1px solid #333",
-                            padding: "0.5rem", borderRadius: "6px", width: "100%",
-                            fontFamily: "inherit", fontSize: "0.85rem",
-                            minHeight: "60px", resize: "vertical",
-                          }}
-                        />
+                        {scene.scene_prompt ? (
+                          <div style={{
+                            background: "#1a1a1a", border: "1px solid #333",
+                            padding: "0.75rem", borderRadius: "6px", fontSize: "0.85rem",
+                            display: "flex", flexDirection: "column", gap: "0.4rem",
+                          }}>
+                            {scene.scene_prompt.expression && (
+                              <div><span style={{ color: "#888" }}>😊 Expression:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.expression}</span></div>
+                            )}
+                            <div><span style={{ color: "#888" }}>✋ Hand:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.free_hand}</span></div>
+                            <div><span style={{ color: "#888" }}>📍 Setting:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.environment}</span></div>
+                            {scene.scene_prompt.key_item && (
+                              <div><span style={{ color: "#888" }}>📦 Item:</span> <span style={{ color: "#ccc" }}>{scene.scene_prompt.key_item}</span></div>
+                            )}
+                          </div>
+                        ) : (
+                          <textarea
+                            value={scene.prompt}
+                            onChange={(e) => { e.stopPropagation(); updatePlannedScene(i, 'prompt', e.target.value); }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              background: "#1a1a1a", color: "#ccc", border: "1px solid #333",
+                              padding: "0.5rem", borderRadius: "6px", width: "100%",
+                              fontFamily: "inherit", fontSize: "0.85rem",
+                              minHeight: "60px", resize: "vertical",
+                            }}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -933,7 +969,7 @@ export default function Home() {
                 <button
                   className={styles.avatarBtn}
                   style={{ marginTop: "1rem" }}
-                  onClick={() => { setPlannedScenes(null); setSelectedSceneIds(new Set()); }}
+                  onClick={() => { setPlannedScenes(null); setPlannedStyling(null); setSelectedSceneIds(new Set()); }}
                 >
                   ← Back to Vibe
                 </button>
