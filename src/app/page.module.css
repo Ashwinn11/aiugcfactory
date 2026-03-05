@@ -725,23 +725,27 @@
 
 .savedImageWrapper {
   position: relative;
-  aspect-ratio: 9/16;
+  width: 100%;
   background: var(--bg-0);
   overflow: hidden;
+  container-type: inline-size;
+  height: 100%;
 }
 
 .savedImageWrapper img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 .savedOverlay {
   position: absolute;
-  pointer-events: none;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .savedCardActions {
@@ -870,10 +874,18 @@
   border: 1px solid var(--border-3);
 }
 
-.canvasWrapper img {
+.canvasWrapperContainer {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  container-type: inline-size;
+}
+
+.canvasBgImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   animation: developReveal 1s var(--ease-out);
 }
 
@@ -1078,12 +1090,12 @@
 }
 
 .fontToggleGroup {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   background: var(--bg-1);
-  padding: 4px;
-  border-radius: 999px;
+  padding: 6px;
+  border-radius: 12px;
   margin-bottom: 24px;
   border: 1px solid var(--border-2);
 }
@@ -1100,11 +1112,12 @@
 }
 
 .styleBtn {
-  padding: 8px 4px;
+  padding: 8px 6px;
   font-size: 8px;
+  flex: 1 1 auto;
   background: transparent;
   border: none;
-  border-radius: 999px;
+  border-radius: 8px;
   color: var(--text-2);
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -1122,7 +1135,7 @@
   background: var(--amber-400) !important;
   color: var(--amber-on) !important;
   box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
-  border-radius: 999px !important;
+  border-radius: 8px !important;
 }
 
 .alignToggleGroup {
@@ -1746,6 +1759,18 @@
     font-size: 26px;
   }
 
+  .modeSelector {
+    grid-template-columns: 1fr;
+  }
+
+  .uploadRow {
+    flex-direction: column;
+  }
+
+  .vibeExamples {
+    flex-direction: column;
+  }
+
   .avatarArea {
     flex-wrap: wrap;
   }
@@ -1825,14 +1850,16 @@
 .editorHeaderLeft {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   flex: 1;
+  min-width: 0;
 }
 
 .editorMain {
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 
 .editorStage {
@@ -1843,32 +1870,40 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
+  padding: 40px;
+  min-height: 50vh;
 }
 
 .canvasFrame {
   position: relative;
   background: #000;
-  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
-  border-radius: 16px;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), 0 0 0 1px #222;
+  border-radius: 12px;
   overflow: hidden;
-  flex-shrink: 0;
-  border: 1px solid #222;
+  max-width: 100%;
+  max-height: 100%;
+  flex-shrink: 1;
 }
 
 .editorAssetPanel {
-  width: 120px;
+  width: 100px;
   background: #111;
   border-right: 1px solid #222;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px 10px;
   gap: 16px;
   overflow-y: auto;
   flex-shrink: 0;
+  scrollbar-width: none;
+}
+
+.editorAssetPanel::-webkit-scrollbar {
+  display: none;
 }
 
 .editorSidebar {
-  width: 440px;
+  width: 380px;
   background: #111;
   border-left: 1px solid #222;
   display: flex;
@@ -1909,13 +1944,13 @@
 
 .editorTitle {
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: #fff;
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 300px;
+  max-width: 200px;
 }
 
 .editorHistoryCtrls {
@@ -2095,24 +2130,108 @@
 .addThumbBtn {
   width: 100%;
   aspect-ratio: 1 / 1.33;
-  border: 2px dashed #333;
+  border: 1px dashed #444;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #666;
   cursor: pointer;
   transition: all 0.2s;
   flex-shrink: 0;
-  gap: 4px;
+  gap: 2px;
 }
 
 .addThumbBtn:hover {
   border-color: var(--amber-400);
-  color: #888;
-  background: rgba(255, 255, 255, 0.02);
+  color: #aaa;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 1024px) {
+  .editorMain {
+    flex-direction: column;
+    overflow-y: hidden;
+  }
+
+  .editorAssetPanel {
+    width: 100%;
+    flex-direction: row;
+    height: 90px;
+    border-right: none;
+    border-bottom: 1px solid #222;
+    padding: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+  }
+
+  .sectionTitle {
+    display: none;
+  }
+
+  .thumbnailStrip {
+    flex-direction: row;
+    width: auto;
+    gap: 12px;
+  }
+
+  .thumbItem,
+  .thumbItemActive,
+  .addThumbBtn {
+    height: 100%;
+    width: auto;
+    aspect-ratio: 1 / 1.33;
+  }
+
+  .editorSidebar {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid #222;
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 60px;
+    /* Space for scrolling */
+  }
+
+  .editorStage {
+    min-height: auto;
+    height: 45vh;
+    /* Keep canvas in view */
+    padding: 16px;
+    flex-shrink: 0;
+  }
+
+  .editorHeaderLeft {
+    gap: 8px;
+  }
+
+  .editorTitle {
+    max-width: 100px;
+    font-size: 0.95rem;
+  }
+
+  .editorBackBtn {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+  }
+
+  .historyBtn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ratioSelect {
+    padding: 0.35rem;
+    font-size: 0.8rem;
+  }
+
+  .editorExportBtn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
 }
 
 .sidebarSection {

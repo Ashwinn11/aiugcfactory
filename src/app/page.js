@@ -958,16 +958,13 @@ export default function Home() {
               {packs.map((pack) => (
                 <div key={pack.id} className={styles.savedCard}>
                   <div className={styles.savedImageWrapper}>
-                    <div style={{ 
-                      width: '540px', 
-                      height: pack.aspectRatio === '1:1' ? '540px' : pack.aspectRatio === '3:4' ? '720px' : '960px', 
-                      transform: 'scale(0.4)', 
-                      transformOrigin: 'top left' 
+                    <div className={styles.savedImageWrapper} style={{ 
+                      aspectRatio: pack.aspectRatio ? pack.aspectRatio.replace(':', '/') : '9/16',
+                      width: '100%'
                     }}>
                       {pack.images.length > 0 && (
                         <img src={pack.images[0].image} alt="Pack cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       )}
-                      {/* Overlays preview on cover if any */}
                       <div className={styles.savedOverlay}>
                         {pack.images[0]?.overlays?.map((ov, idx) => {
                           const isSolid = ov.bgMode === 'solid';
@@ -975,13 +972,18 @@ export default function Home() {
                           const isLight = parseInt(selectedColor.replace('#',''), 16) > 0xffffff / 2;
                           const bgColor = isSolid ? selectedColor : 'transparent';
                           const textColor = isSolid ? (isLight ? '#000000' : '#ffffff') : selectedColor;
+                          
+                          // Use cqw (container query width) for text scaling
+                          const scaleRatio = (ov.size || 30) / 30;
+                          const fontCqw = ((ov.fontSize || 24) / 540) * 100 * scaleRatio;
+                          
                           return (
                             <div key={idx} className={styles.textOverlay} style={{
                               position: "absolute",
                               left: `${ov.x}%`,
                               top: `${ov.y}%`,
-                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
-                              fontSize: `${ov.fontSize || 24}px`,
+                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
+                              fontSize: `${fontCqw}cqw`,
                             }}>
                               <span style={{ color: textColor, backgroundColor: bgColor }}>{ov.text}</span>
                             </div>
@@ -1113,9 +1115,7 @@ export default function Home() {
             </div>
 
             {/* ═══ Stage (Centered Canvas) ═══ */}
-              <div className={styles.editorStage} style={{
-                height: editingPack.aspectRatio === '1:1' ? '540px' : editingPack.aspectRatio === '3:4' ? '720px' : '960px'
-              }}>
+              <div className={styles.editorStage}>
               {editingPack.images.length > 1 && (
                 <>
                   <button 
@@ -1134,12 +1134,12 @@ export default function Home() {
               )}
 
               <div className={styles.canvasFrame} style={{ 
-                width: '540px', 
-                height: editingPack.aspectRatio === '1:1' ? '540px' : editingPack.aspectRatio === '3:4' ? '720px' : '960px', 
-                transform: `scale(${editingPack.aspectRatio === '1:1' ? 0.8 : editingPack.aspectRatio === '3:4' ? 0.75 : 0.65})`,
-                transformOrigin: 'center center'
+                aspectRatio: editingPack.aspectRatio ? editingPack.aspectRatio.replace(':', '/') : '9/16',
+                height: '100%',
+                maxWidth: '100%',
+                margin: '0 auto'
               }}>
-                <div className={styles.canvasWrapper} style={{ width: '100%', height: '100%', position: 'relative' }}>
+                <div className={styles.canvasWrapperContainer}>
                   {editingPack.images[editorIdx] ? (
                     <>
                       <img 
@@ -1160,8 +1160,12 @@ export default function Home() {
                           1px -1px 0 ${outlineColor}, -1px 1px 0 ${outlineColor},
                           0px 1px 0 ${outlineColor}, 0px -1px 0 ${outlineColor},
                           1px 0px 0 ${outlineColor}, -1px 0px 0 ${outlineColor},
-                          2px 2px 2px rgba(0,0,0,0.3)
+                          0.04em 0.04em 0.04em rgba(0,0,0,0.3)
                         ` : '';
+                        
+                        // Responsive text scaling
+                        const scaleRatio = (ov.size || 30) / 30;
+                        const fontCqw = ((ov.fontSize || 24) / 540) * 100 * scaleRatio;
 
                         return (
                           <div 
@@ -1170,8 +1174,8 @@ export default function Home() {
                             style={{
                               left: `${ov.x}%`,
                               top: `${ov.y}%`,
-                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg) scale(${(ov.size || 30) / 30})`,
-                              fontSize: `${ov.fontSize || 24}px`
+                              transform: `translate(-50%, -50%) rotate(${ov.rotation || 0}deg)`,
+                              fontSize: `${fontCqw}cqw`
                             }}
                             onMouseDown={(e) => {
                               const startX = e.clientX;
