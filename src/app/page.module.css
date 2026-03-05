@@ -1891,14 +1891,14 @@ body.fixedBody {
   width: 100%;
   background: rgba(0, 0, 0, 0.95);
   border-top: 1px solid #1a1a1a;
-  /* Stick to bottom of the editor layout, above browser chrome */
-  position: sticky;
+  /* Fixed to bottom of screen for reliable visibility above browser chrome */
+  position: fixed;
   bottom: 0;
   left: 0;
-  /* Push content up above iOS home indicator / Android nav bar */
-  padding: 12px 24px env(safe-area-inset-bottom, 16px);
+  /* Padding handles both internal gap and safe area insets */
+  padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 16px));
   flex-direction: column;
-  z-index: 1000;
+  z-index: 2000;
   box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);

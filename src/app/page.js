@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { toPng } from "html-to-image";
+import { toPng, toBlob } from "html-to-image";
 import Cropper from 'react-easy-crop';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import styles from "./page.module.css";
 import * as Icons from "lucide-react";
 
@@ -108,6 +110,7 @@ export default function Home() {
   const [editorIdx, setEditorIdx] = useState(0); 
   const [exportQueue, setExportQueue] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [isBatchExporting, setIsBatchExporting] = useState(false);
 
   // Undo/Redo (Editor specific)
   const [editorHistory, setEditorHistory] = useState([]);
@@ -501,55 +504,85 @@ export default function Home() {
   // ──── Batch Export Logic ────
   useEffect(() => {
     if (exportQueue.length > 0 && !exportingPost && !isExporting) {
-      const next = exportQueue[0];
-      setExportingPost(next);
-      setExportQueue(prev => prev.slice(1));
+      // If we are batch exporting (more than 1 image), we append to a zip
+      // We'll handle zipping logic in a more structured way
     }
   }, [exportQueue, exportingPost, isExporting]);
 
-  const handleDownloadTrigger = useCallback((post) => {
-    if (!post) return;
-    if (!post.overlays || post.overlays.length === 0) {
-      const a = document.createElement("a");
-      a.href = post.image;
-      a.download = `ugcfactory_${Date.now()}.png`;
-      a.click();
-    } else {
-      setExportingPost(post);
-    }
-  }, []);
-
-  const handleExportPack = useCallback((pack, options = {}) => {
+  // Enhanced Batch Export with Zipping
+  const handleExportPack = useCallback(async (pack, options = {}) => {
     if (!pack?.images) return;
     const { skipOverlays = false } = options;
-    setExportQueue(pack.images.map(img => ({ 
+    const imagesToExport = pack.images.map(img => ({ 
       ...img, 
       aspectRatio: pack.aspectRatio,
       overlays: skipOverlays ? [] : img.overlays 
-    })));
+    }));
+
+    if (imagesToExport.length === 1) {
+      setIsBatchExporting(false);
+      setExportingPost(imagesToExport[0]);
+    } else {
+      setIsBatchExporting(true);
+      setIsExporting(true);
+      const zip = new JSZip();
+      
+      for (let i = 0; i < imagesToExport.length; i++) {
+        const post = imagesToExport[i];
+        setExportingPost(post);
+        
+        const blob = await new Promise((resolve) => {
+          setTimeout(async () => {
+            try {
+              const el = exportRef.current;
+              if (!el) return resolve(null);
+              await toBlob(el, { pixelRatio: 1 });
+              const result = await toBlob(el, {
+                quality: 1.0, pixelRatio: 1, cacheBust: true,
+                style: { transform: 'none', visibility: 'visible', opacity: '1' }
+              });
+              resolve(result);
+            } catch (e) { console.error(e); resolve(null); }
+          }, 1500);
+        });
+
+        if (blob) {
+          zip.file(`image_${i + 1}.png`, blob);
+        }
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      saveAs(content, `ugcfactory_pack_${Date.now()}.zip`);
+      
+      setIsBatchExporting(false);
+      setIsExporting(false);
+      setExportingPost(null);
+    }
   }, []);
 
+  const handleDownloadAll = useCallback(() => {
+    if (!result?.images) return;
+    handleExportPack(result, { skipOverlays: true });
+  }, [result, handleExportPack]);
+
   useEffect(() => {
-    if (exportingPost && exportRef.current) {
+    if (exportingPost && exportRef.current && !isBatchExporting) {
       setIsExporting(true);
       const capture = async () => {
         try {
-          // Cap pixelRatio to bypass iOS Safari's native maximum hardware canvas size limits (~16 Megapixels).
-          // 1x scale at 1080p base bounds guarantees rendering without black-screen export corruption.
-          const dataUrl = await toPng(exportRef.current, { 
+          const el = exportRef.current;
+          // Safari Hack: Call twice
+          await toBlob(el, { pixelRatio: 1 }); 
+          
+          const blob = await toBlob(el, { 
             quality: 1.0, 
             pixelRatio: 1,
-            cacheBust: false,
-            style: { 
-              transform: 'none', 
-              transformOrigin: 'top left',
-              visibility: 'visible'
-            }
+            cacheBust: true,
+            style: { transform: 'none', visibility: 'visible', opacity: '1' }
           });
-          const a = document.createElement("a");
-          a.href = dataUrl;
-          a.download = `ugcfactory_${Date.now()}_hq.png`;
-          a.click();
+
+          if (!blob) throw new Error("Blob generation failed");
+          saveAs(blob, `ugcfactory_${Date.now()}.png`);
         } catch (err) {
           console.error("Failed image capture:", err);
         } finally {
@@ -557,10 +590,9 @@ export default function Home() {
           setExportingPost(null);
         }
       };
-      // 1.2s ensure fonts and base images are fully decoded in the offscreen frame
-      setTimeout(capture, 1200);
+      setTimeout(capture, 1500);
     }
-  }, [exportingPost]);
+  }, [exportingPost, isBatchExporting]);
 
   // ──── Save Pack ────
   const handleSave = useCallback((result) => {
@@ -607,23 +639,7 @@ export default function Home() {
     });
   }, []);
 
-  // Generator mode "Download All" — routes images through the same
-  // batch export queue used by the editor so iOS Safari can capture them.
-  // Direct <a>.click() in a loop is blocked on iOS.
-  const handleDownloadAll = useCallback(() => {
-    if (!result?.images) return;
-    // If images have no overlays (generator output) we can direct-download.
-    // Use the export queue so each is processed via toPng (works on iOS).
-    const allAsExportItems = result.images.map(img => ({
-      image: img.image,
-      overlays: [],  // generator images have no text overlays
-      aspectRatio: result.aspectRatio || '9:16',
-      offsetX: 50,
-      offsetY: 50,
-      zoom: 1,
-    }));
-    setExportQueue(allAsExportItems);
-  }, [result]);
+  // Placeholder removed as logic merged into handleExportPack above
 
   // ──── Keyboard shortcut ────
   const handleKeyDown = (e) => {
@@ -1222,7 +1238,7 @@ export default function Home() {
               <button className={styles.editorExportBtn} onClick={() => {
                 handleExportPack(editingPack);
               }}>
-                <Icon name="Download" size={16} color="var(--amber-on)" /> {exportQueue.length > 0 ? `Exporting (${exportQueue.length})` : 'Export Pack'}
+                <Icon name="Download" size={16} color="var(--amber-50)" /> {exportQueue.length > 0 ? `Exporting (${exportQueue.length})` : 'Export Pack'}
               </button>
             </div>
           </div>
@@ -1376,7 +1392,12 @@ export default function Home() {
                                   willChange: 'transform', // GPU layer prevents reflow on drag
                                 }}
                                 onPointerDown={(e) => {
-                              const startX = e.clientX;
+                                  const el = e.currentTarget;
+                                  const currentWidth = el.offsetWidth;
+                                  el.style.width = `${currentWidth}px`;
+                                  el.style.maxWidth = 'none';
+
+                                  const startX = e.clientX;
                               const startY = e.clientY;
                               const startPosX = ov.x;
                               const startPosY = ov.y;
@@ -1408,6 +1429,10 @@ export default function Home() {
                                 }
                               };
                               const onPointerUp = () => {
+                                // Unlock width
+                                el.style.width = '';
+                                el.style.maxWidth = '';
+
                                 window.removeEventListener("pointermove", onPointerMove);
                                 window.removeEventListener("pointerup", onPointerUp);
                                 window.removeEventListener("pointercancel", onPointerUp);
@@ -1801,12 +1826,12 @@ export default function Home() {
       {exportingPost && (
         <div style={{ 
           position: 'fixed', 
-          top: 0, 
-          left: '-110vw',   // off-screen left: fully outside viewport, not clipped
+          top: '-9999px',      // Further off-screen
+          left: '-9999px',     // Further off-screen
           width: '1080px',
           pointerEvents: 'none', 
-          zIndex: 9999,      // high z-index so nothing occludes it
-          opacity: 1,        // must be visible for iOS Safari canvas capture
+          zIndex: 9999,
+          opacity: 1, 
           overflow: 'visible'
         }}>
           <div id="export-surface" ref={exportRef} style={{ 
