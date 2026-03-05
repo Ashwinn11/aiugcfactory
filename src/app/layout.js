@@ -20,7 +20,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: "UGC Factory — AI Ad Creative Generator",
+  title: "AI UGC Factory — AI Ad Creative Generator",
   description:
     "Generate scroll-stopping Facebook & Instagram ad creative with AI. UGC selfies, product hero shots, lifestyle scenes — at $0.04 per image.",
 };
