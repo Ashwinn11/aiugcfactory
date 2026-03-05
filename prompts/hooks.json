@@ -1,0 +1,126 @@
+{
+    "categories": [
+        {
+            "id": "best_performers",
+            "name": "High-Performance Viral Hooks",
+            "description": "Consistently stop the scroll by triggering curiosity and promising immediate value.",
+            "formulas": [
+                "Nobody is talking about THIS...",
+                "You’re doing [something] wrong – here’s why",
+                "3 secrets [industry] pros don’t want you to know",
+                "This will save you HOURS...",
+                "Here’s the fastest way to [desirable outcome]"
+            ],
+            "why_it_works": "They trigger curiosity, leverage FOMO, and promise quick, concrete value."
+        },
+        {
+            "id": "problem_solution",
+            "name": "The Problem-Solution Hook",
+            "description": "Identify a pain point, then promise a solution.",
+            "formulas": [
+                "If you're struggling to [problem], here's what you're doing wrong...",
+                "Still getting [negative result]? These [number] changes will fix that...",
+                "Your [thing] isn't [result] because you're missing this...",
+                "You’re doing [something] wrong – here’s why"
+            ],
+            "why_it_works": "Qualifies the audience immediately and promises value."
+        },
+        {
+            "id": "number",
+            "name": "The Number Hook",
+            "description": "Specific numbers create curiosity and set clear expectations.",
+            "formulas": [
+                "[number] signs you're about to be [outcome] (most people miss #[number])",
+                "I tried [number] [category]. Here are the only [number] that worked...",
+                "[number] words that will change how people see you...",
+                "3 secrets [industry] pros don’t want you to know"
+            ],
+            "why_it_works": "Feels concrete and digestible. Promises actionable info."
+        },
+        {
+            "id": "contradiction",
+            "name": "The Contradiction Hook",
+            "description": "Challenge common beliefs to create cognitive dissonance.",
+            "formulas": [
+                "Everything you know about [topic] is wrong...",
+                "The worst [topic] advice that everyone follows...",
+                "Why [action] is making you [negative outcome]...",
+                "Nobody is talking about THIS..."
+            ],
+            "why_it_works": "Forces viewers to question assumptions and stick around for the explanation."
+        },
+        {
+            "id": "secret",
+            "name": "The Secret/Insider Hook",
+            "description": "Promise exclusive or little-known information.",
+            "formulas": [
+                "What [type of people] know that you don't...",
+                "The [platform/industry] change [authority] doesn't want you to know...",
+                "Industry secret: This is how we really [goal]...",
+                "3 secrets [industry] pros don’t want you to know"
+            ],
+            "why_it_works": "People want to feel like they have exclusive access."
+        },
+        {
+            "id": "time_sensitive",
+            "name": "The Time-Sensitive Hook",
+            "description": "Create urgency or reference current events.",
+            "formulas": [
+                "This trend will be dead by [time], but here's how to use it now...",
+                "If you don't do this before [year/event] ends...",
+                "While everyone's distracted by [event], smart people are doing this...",
+                "This will save you HOURS..."
+            ],
+            "why_it_works": "Triggers FOMO and compels immediate action."
+        },
+        {
+            "id": "personal_story",
+            "name": "The Personal Story Hook",
+            "description": "Share a relatable experience or transformation.",
+            "formulas": [
+                "I was [negative state] [time] ago. Here's what changed everything...",
+                "My biggest mistake cost me [amount]. Don't make the same one...",
+                "The day I realized I was the problem..."
+            ],
+            "why_it_works": "Creates emotional connection and relatability."
+        },
+        {
+            "id": "question",
+            "name": "The Question Hook",
+            "description": "Ask a question the audience desperately wants answered.",
+            "formulas": [
+                "Want to know the real reason you're not [positive outcome]?",
+                "Ever wonder why some people seem naturally [trait]?",
+                "Curious how some creators [achievement] overnight?"
+            ],
+            "why_it_works": "Creates an open loop in the viewer's mind that demands closure."
+        }
+    ],
+    "enhancements": {
+        "emotional_triggers": [
+            "Fear",
+            "Curiosity",
+            "Desire",
+            "Anger"
+        ],
+        "power_words": [
+            "Secret",
+            "Hidden",
+            "Exposed",
+            "Never",
+            "Always",
+            "Everyone",
+            "Instant",
+            "Immediately",
+            "Now",
+            "Proven",
+            "Guaranteed",
+            "Tested"
+        ],
+        "visual_contrast": [
+            "Bold colors",
+            "Large readable text",
+            "High contrast"
+        ]
+    }
+}

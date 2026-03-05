@@ -979,7 +979,7 @@ export default function Home() {
                   {(planning || generating) ? (
                     <><span className={styles.spinner} /> {planning ? "Planning…" : "Generating…"}</>
                   ) : (
-                    <><Icon name="Sparkles" size={18} fill="#ffeb3b" color="#ffeb3b" /> Generate Carousel</>
+                    <><Icon name="Sparkles" size={18} color="#000000" /> Generate Carousel</>
                   )}
                 </button>
               </section>
@@ -1049,7 +1049,7 @@ export default function Home() {
 
               <div className={styles.genActions} style={{ marginTop: '1rem' }}>
                 <button className={styles.downloadAllBtn} onClick={handleDownloadAll}>
-                  <Icon name="Download" size={16} color="#34d399" /> Download All {result.images.length}
+                  <Icon name="Download" size={16} color="#000000" /> Download All {result.images.length}
                 </button>
                 {packs.some(p => p.images.length > 0 && p.images[0].image === result.images[0].image) ? (
                   <button className={styles.saveLibraryBtn} disabled style={{ opacity: 0.6, cursor: 'default' }}>

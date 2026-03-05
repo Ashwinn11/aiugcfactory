@@ -5,16 +5,7 @@ import { join } from "path";
 
 const TEXT_MODEL = "gemini-3.1-flash-image-preview";
 
-// Load category templates
-function getCategoryConfig(categoryId) {
-  try {
-    const data = readFileSync(join(process.cwd(), "prompts", "categories.json"), "utf-8");
-    const categories = JSON.parse(data);
-    return categories[categoryId] || categories["beauty"];
-  } catch {
-    return null;
-  }
-}
+
 
 async function analyzeAvatar(ai, avatar) {
   try {
@@ -50,40 +41,59 @@ async function analyzeProduct(ai, productImage) {
   }
 }
 
+// Load hook strategies
+function getHookStrategies() {
+  try {
+    const data = readFileSync(join(process.cwd(), "prompts", "hooks.json"), "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
 // ═══ PHASE 1: CREATIVE PLANNER ═══
 function buildPlannerPrompt(vibe, mode, personDescription, productDescription, category) {
   const isAd = mode === "ad";
-  const catConfig = isAd ? getCategoryConfig(category) : null;
+  const hookStrategies = isAd ? getHookStrategies() : null;
   const slideCount = isAd ? 6 : 5;
 
   // Build category-specific section for ads
   let categorySection = "";
-  if (isAd && catConfig) {
-    const slides = Object.entries(catConfig.slide_structure).map(([key, desc]) => {
-      const num = key.split("_")[0];
-      const name = key.split("_").slice(1).join(" ").toUpperCase();
-      return `Slide ${num} — ${name}: ${desc}`;
-    }).join("\n");
+  if (isAd) {
+    const hookMenu = hookStrategies?.categories.map(c => 
+      `### ${c.name}\n- Description: ${c.description}\n- Formulas: ${c.formulas.join(" | ")}`
+    ).join("\n\n");
 
-    categorySection = `This is an AD for a ${catConfig.name} product.
+    categorySection = `This is a HIGH-CONVERTING VIRAL AD.
 
-CATEGORY CONCEPT: ${catConfig.slide_concept}
+STRUCTURE (Choose the best fit for the content):
 
-SLIDE STRUCTURE (exactly 6 slides):
-${slides}
+Option A: 5-Slide "Value" Formula (Best for quick results/tips)
+1. **HOOK**: Stop the scroll using a "Global Hook Strategy".
+2. **PROBLEM**: Describe the audience's specific mistake or frustration.
+3. **INSIGHT**: Reveal the "Hidden Reason" why they are failing.
+4. **VALUE/STEPS**: Provide 2-3 actionable tips or product benefits.
+5. **RESULT + CTA**: The payoff (lifestyle upgrade) + clear call to action.
 
-HOOK FORMULAS (use one or adapt):
-${catConfig.hook_formulas.map(h => `- "${h}"`).join("\n")}
+Option B: 6-Slide "Storytelling" Formula (Best for deep connection/empathy)
+1. **HOOK**: Stop the scroll using a "Global Hook Strategy".
+2. **RELATABLE PROBLEM**: Humanize the struggle.
+3. **MISTAKE/MYTH**: Challenge a common belief or show a failed attempt.
+4. **KEY INSIGHT**: The "Aha!" moment/discovery of the product.
+5. **ACTIONABLE TIPS**: Practical ways the product helps them.
+6. **RESULT + CTA**: The final transformation + clear call to action.
 
-PROMPT RULES:
-- Lock across all slides: ${catConfig.prompt_rules.lock_across_all_slides.join(", ")}
-- Change per slide ONLY: ${catConfig.prompt_rules.change_per_slide.join(", ")}
-${catConfig.prompt_rules.preservation ? `- PRESERVATION: ${catConfig.prompt_rules.preservation}` : ""}
-${catConfig.prompt_rules.style_options ? `- Style options: ${catConfig.prompt_rules.style_options.join(", ")}` : ""}
+THE PSYCHOLOGICAL FLOW:
+**Curiosity → Tension → Explanation → Payoff.**
+
+GLOBAL HOOK STRATEGIES (Choose the single most effective one for Slide 1):
+${hookMenu}
+
+GLOBAL HOOK ENHANCEMENT:
+- Emotional Triggers: ${hookStrategies?.enhancements.emotional_triggers.join(", ")}
+- Power Words: ${hookStrategies?.enhancements.power_words.join(", ")}
 
 IMPORTANT: Not every frame needs a person. Set requires_avatar: false for scene-only frames.`;
-  } else if (isAd) {
-    categorySection = `This is an AD. Follow a 6-slide Hook methodology.`;
   }
 
   return `You are a top-tier social media content creator. Plan a ${slideCount}-part visual story for a TikTok/Instagram carousel.
@@ -94,7 +104,7 @@ ${productDescription ? `\nPRODUCT:\n${productDescription}` : ""}
 ${isAd ? `Product Description: "${vibe}"` : `Vibe: "${vibe}"`}
 Mode: ${mode}
 
-${isAd ? categorySection : `This is a LIFESTYLE post. Tell an authentic, mood-driven story that flows naturally.`}
+${categorySection || `This is a LIFESTYLE post. Tell an authentic, mood-driven story that flows naturally.`}
 
 ${mode === "post" 
     ? `OUTFIT CONSISTENCY: Since this is ONE moment, generate a "styling" object that applies to ALL scenes:
@@ -121,34 +131,41 @@ ${mode === "post" ? `- "styling": { "outfit": "...", "hair": "..." } (shared acr
 }
 
 // ═══ PHASE 2: ANGLE ASSIGNMENT (Decides how to film each scene) ═══
-async function assignAngles(ai, scenes) {
+async function assignAngles(ai, scenes, mode) {
+  const isAd = mode === "ad";
   const anglePrompt = `You are a UGC camera director. Given a list of planned scenes, assign the best camera angle for each one.
 
-Think about HOW a real person would film this on their phone:
-- Showing their face reacting? → selfie angle (close-up from below, one arm out)
-- Showing something in their hand? → looking down at hand (POV-style)
-- Showing their full body or outfit? → friend/timer shot from a few feet away
-- Showing food on a plate? → overhead POV looking down, with a hand holding utensil or reaching for food
-- Showing an app screen on a phone? → over-the-shoulder or looking down at phone in hand
-- Showing themselves in a mirror? → mirror reflection with phone visible
-- Showing a room/space? → wide angle, but include a hand or arm at the edge of frame
+${isAd ? 
+  `THIS IS A STRICT UGC AD:
+  - Every shot MUST feel "Self-Filmed" by the influencer.
+  - ONLY 3 ALLOWED ANGLES:
+    1. "Selfie": Front camera, face close, influencer holding phone.
+    2. "Mirror Selfie": Influencer films their reflection in a mirror.
+    3. "First-person POV": Back camera pointing at hands/product from eyes.
+  - FORBIDDEN: No tripods. No distance shots. No "invisible friend" filming. No full body shots from far away.
+  - The influencer must logically be holding the camera in every frame.` 
+  : "This is a social media post. Use a mix of angles for variety."}
 
-IGNORE any camera/shot language already present in the action field. Make your own decision.
-UGC ALWAYS has human presence. Even when requires_avatar is false (no face), include the person's hand, arm, or body in frame. Pure scene-only shots with zero human presence should be very rare.
+Think about HOW a real person would film this on their phone:
+- Selfie: Phone held by the person. Face is close. ONE hand is busy holding the phone (not visible).
+- Mirror Selfie: Reflection in mirror. Phone is visible.
+- First-person POV: Camera is at eye-level. We see the person's hands/arms but NOT their face.
+
+RULES FOR IMMERSION:
+- Do NOT mention "a friend", "someone else", or "the camera person" filming. 
+- Do NOT describe the recording device (phone/camera) as being visible in the frame, unless it is a MIRROR selfie.
+- Total hands visible in the frame (hands_visible) must be accurate:
+  - Selfie: MAX 1 hand visible (since the other holds the phone).
+  - Mirror Selfie: 1 or 2 hands visible.
+  - POV: 1 or 2 hands visible.
+  - Tripod (LIFESTYLE POST ONLY): 0, 1, or 2 hands visible.
 
 For each scene, add these fields to scene_prompt:
-- "angle": Natural description of how the camera captures this scene. Do NOT mention "a friend" or "someone else" filming. Just describe the camera position (e.g., "Medium shot from a few feet away").
-- "hands_visible": 1 (person holding phone to film, one hand free) or 2 (phone on tripod/filmed by someone else, both hands free). Prefer at least 1 hand visible in EVERY scene.
-- "hand_action": What the visible hand(s) are doing.
+- "angle": Natural description of the shot (e.g., "Standard selfie looking up", "Overhead POV", "Full body mirror reflection").
+- "hands_visible": Exact number of hands clearly seen in the image (0, 1, or 2).
+- "hand_action": What the visible hand(s) are doing. If hands_visible is 0, leave empty.
 
-PHYSICAL RULES:
-- If hands_visible = 1, describe ONLY one hand. The other holds the phone.
-- If hands_visible = 2, describe both hands.
-- Two-handed actions (opening box, clapping, holding with both hands) REQUIRE hands_visible = 2.
-- Ensure at least 3 different angle styles across all scenes.
-
-Return the full JSON array with angle, hands_visible, and hand_action added to each scene_prompt.
-
+Return the full JSON array.
 SCENES:
 ${JSON.stringify(scenes, null, 2)}`;
 
@@ -163,10 +180,8 @@ ${JSON.stringify(scenes, null, 2)}`;
     if (Array.isArray(result) && result.length === scenes.length) {
       return result;
     }
-    console.warn("Angle assignment returned unexpected format, using original scenes");
     return scenes;
   } catch (err) {
-    console.error("Angle assignment failed, using original scenes:", err.message);
     return scenes;
   }
 }
@@ -175,19 +190,15 @@ ${JSON.stringify(scenes, null, 2)}`;
 async function validateScenes(ai, scenes) {
   const validatorPrompt = `You are a "Physical Reality Checker" for AI-generated photo scene plans.
 
-Each scene has a "scene_prompt" with: angle, expression, hands_visible, hand_action, environment, key_item.
+CRITICAL PHYSICAL AUDIT:
+1. **HAND COUNT AUDIT**: Count the number of hands mentioned in "hand_action". If you describe "both hands" or two separate hands doing things, "hands_visible" MUST be 2. If you only describe one hand, "hands_visible" MUST be 1. 100% agreement required.
+2. **SHOT TYPE AUDIT**: 
+   - If "angle" is a "Selfie" (not mirror), hands_visible CANNOT be 2. One hand is holding the phone.
+   - If "angle" is "POV", requires_avatar MUST be false (we don't see our own face from our eyes).
+   - If "requires_avatar" is false, "expression" MUST be empty.
+3. **UGC IMMERSION**: Ensure no "ghost cameras" or "friends" are mentioned. No hands holding phones should be visible unless it's a mirror.
 
-VALIDATION CHECKS:
-1. HANDS COUNT: If "hand_action" describes a two-handed action (opening, applying with both hands, holding two items) then "hands_visible" MUST be 2 and the "angle" must be from a distance (not selfie/mirror holding phone). Fix if wrong.
-2. FACE vs ANGLE: If "angle" implies the person is behind the camera (looking down, first-person POV), then requires_avatar MUST be false and "expression" should be empty.
-3. FACE vs ANGLE: If "angle" shows the person's face (selfie, mirror, from a distance), then requires_avatar MUST be true.
-4. HANDS vs ANGLE: If "angle" implies holding the phone (selfie-style, close-up from below), then hands_visible MUST be 1 max.
-5. HANDS vs ANGLE: If "angle" implies shot from a distance (full body, medium shot), hands_visible can be 0, 1, or 2.
-6. MIRROR RULE: If "environment" or "angle" mentions "mirror" or "reflection", the "angle" MUST describe a mirror selfie. The person sees themselves through the mirror. If one hand holds the phone, hands_visible = 1. If BOTH hands are visible in the reflection while phone sits on a sink/tripod, hands_visible = 2. BUT if hands_visible = 1, they CANNOT do a two-handed action. Fix the action if it requires two hands but they are holding a phone.
-7. ANGLE DIVERSITY: Ensure at least 3 distinctly different angles across all scenes. Not all scenes should look the same.
-8. If anything contradicts, fix by adjusting either the angle OR the hand_action to make it physically possible. Prefer keeping the scene's creative intent.
-
-Return the corrected JSON array. If a scene is fine, return it unchanged.
+If a scene fails any audit, fix it by modifying "angle", "hands_visible", or "hand_action" until it is physically possible for ONE person to take the photo.
 
 SCENES:
 ${JSON.stringify(scenes, null, 2)}`;
@@ -203,10 +214,8 @@ ${JSON.stringify(scenes, null, 2)}`;
     if (Array.isArray(validated) && validated.length === scenes.length) {
       return validated;
     }
-    console.warn("Validator returned unexpected format, using original scenes");
     return scenes;
   } catch (err) {
-    console.error("Validation failed, using original scenes:", err.message);
     return scenes;
   }
 }
@@ -270,7 +279,7 @@ export async function POST(request) {
     // Phase 2: Assign camera angles based on scene content
     console.log("Styling:", JSON.stringify(styling, null, 2));
     console.log("Raw scenes (story only):", JSON.stringify(scenes, null, 2));
-    const scenesWithAngles = await assignAngles(ai, scenes);
+    const scenesWithAngles = await assignAngles(ai, scenes, mode);
     console.log("Scenes with angles:", JSON.stringify(scenesWithAngles, null, 2));
 
     // Phase 3: Validate physical rules
