@@ -5,8 +5,6 @@ import { join } from "path";
 
 const TEXT_MODEL = "gemini-3.1-flash-image-preview";
 
-
-
 async function analyzeAvatar(ai, avatar) {
   try {
     const res = await ai.models.generateContent({
@@ -41,7 +39,6 @@ async function analyzeProduct(ai, productImage) {
   }
 }
 
-// Load hook strategies
 function getHookStrategies() {
   try {
     const data = readFileSync(join(process.cwd(), "prompts", "hooks.json"), "utf-8");
@@ -51,244 +48,144 @@ function getHookStrategies() {
   }
 }
 
-// ═══ PHASE 1: CREATIVE PLANNER ═══
-function buildPlannerPrompt(vibe, mode, personDescription, productDescription, category) {
+// ═══ THE CONSOLIDATED JSON PLANNER ═══
+function buildPlannerPrompt(vibe, mode, personDescription, productDescription) {
   const isAd = mode === "ad";
+  const isPost = mode === "post";
   const hookStrategies = isAd ? getHookStrategies() : null;
   const slideCount = isAd ? 6 : 5;
 
-  // Build category-specific section for ads
-  let categorySection = "";
-  if (isAd) {
-    const hookMenu = hookStrategies?.categories.map(c => 
-      `### ${c.name}\n- Description: ${c.description}\n- Formulas: ${c.formulas.join(" | ")}`
-    ).join("\n\n");
+  const hookMenu = hookStrategies?.categories.map(c => 
+    `- ${c.name}: ${c.formulas.join(" | ")}`
+  ).join("\n") || "";
 
-    categorySection = `This is a HIGH-CONVERTING VIRAL AD.
+  const angleInstruction = isAd 
+    ? "STRICT AD RULE: Use ONLY 'Selfie', 'Mirror Selfie', or 'First-person POV'. Every slide must feel self-filmed by the influencer."
+    : "MIXED MODES: Use a mix of 'Selfie', 'Mirror Selfie', 'First-person POV', and 'Standard (Tripod/Distance)' for variety.";
 
-STRUCTURE (Choose the best fit for the content):
+  const modeLogic = isPost 
+    ? "OCCASION RULE: This is a single occasion. Every slide must feature the SAME OUTFIT, SAME ACCESSORIES, SAME VIBE, and SAME TIME of day. Character consistency is paramount."
+    : isAd 
+    ? "NATURAL FLOW: This ad spans multiple moments (Problem -> Insight -> Transformation). Outfits and locations should change logically to show the story over time."
+    : "RANDOM DUMP: This is a monthly recap. Every slide should feel like a different day/moment with different outfits and locations.";
 
-Option A: 5-Slide "Value" Formula (Best for quick results/tips)
-1. **HOOK**: Stop the scroll using a "Global Hook Strategy".
-2. **PROBLEM**: Describe the audience's specific mistake or frustration.
-3. **INSIGHT**: Reveal the "Hidden Reason" why they are failing.
-4. **VALUE/STEPS**: Provide 2-3 actionable tips or product benefits.
-5. **RESULT + CTA**: The payoff (lifestyle upgrade) + clear call to action.
+  const captionInstruction = isAd 
+    ? "AD COPY: For Slide 1, this MUST be a viral hook from the provided strategies. For subsequent slides, it should be the key messaging, punchline, or 'benefit' text for that slide. Keep it extremely punchy and click-driven."
+    : "SOCIAL CAPTION: A punchy 1-line caption with emoji that feels like an authentic personal post.";
 
-Option B: 6-Slide "Storytelling" Formula (Best for deep connection/empathy)
-1. **HOOK**: Stop the scroll using a "Global Hook Strategy".
-2. **RELATABLE PROBLEM**: Humanize the struggle.
-3. **MISTAKE/MYTH**: Challenge a common belief or show a failed attempt.
-4. **KEY INSIGHT**: The "Aha!" moment/discovery of the product.
-5. **ACTIONABLE TIPS**: Practical ways the product helps them.
-6. **RESULT + CTA**: The final transformation + clear call to action.
+  return `You are a world-class Social Media Strategist and AI Prompt Engineer. Generate a ${slideCount}-part JSON plan for a carousel.
 
-THE PSYCHOLOGICAL FLOW:
-**Curiosity → Tension → Explanation → Payoff.**
+USER INPUT:
+- Mode: ${mode} (Rules: ${modeLogic})
+- Subject Description: ${personDescription || "Generic attractive person"}
+- Product Description: ${productDescription || "None"}
+- Vibe/Instruction: ${vibe}
 
-GLOBAL HOOK STRATEGIES (Choose the single most effective one for Slide 1):
+CAMERA & PHYSICAL REALITY RULES (CRITICAL):
+- ${angleInstruction}
+- If "Selfie": "perspective" MUST be "Close-up front-facing camera selfie, one extended arm holding the camera out of frame". EXACTLY 1 hand can be visible doing an action. The other hand is holding the camera.
+- If "First-person POV": "perspective" MUST be "First-person point-of-view eye-level shot". Face NOT visible. EXACTLY 1 hand can be visible doing an action. The other hand is holding the camera.
+- If "Mirror Selfie": BOTH hands can be visible (one holding the phone in the reflection).
+- NEVER describe impossible actions requiring 3 hands (e.g., taking a selfie in your left hand, holding a phone in your right hand, AND pointing). Everything must physically fit the hands available.
+
+STRATEGY (For Ads Slide 1):
 ${hookMenu}
 
-GLOBAL HOOK ENHANCEMENT:
-- Emotional Triggers: ${hookStrategies?.enhancements.emotional_triggers.join(", ")}
-- Power Words: ${hookStrategies?.enhancements.power_words.join(", ")}
-
-IMPORTANT: Not every frame needs a person. Set requires_avatar: false for scene-only frames.`;
-  }
-
-  return `You are a top-tier social media content creator. Plan a ${slideCount}-part visual story for a TikTok/Instagram carousel.
-
-${personDescription ? `ABOUT THE CREATOR:\n${personDescription}` : ""}
-${productDescription ? `\nPRODUCT:\n${productDescription}` : ""}
-
-${isAd ? `Product Description: "${vibe}"` : `Vibe: "${vibe}"`}
-Mode: ${mode}
-
-${categorySection || `This is a LIFESTYLE post. Tell an authentic, mood-driven story that flows naturally.`}
-
-${mode === "post" 
-    ? `OUTFIT CONSISTENCY: Since this is ONE moment, generate a "styling" object that applies to ALL scenes:
-- "outfit": What the person is wearing
-- "hair": Hair style for the story`
-    : mode === "ad"
-    ? `OUTFIT VARIETY: This ad tells a story over multiple days/moments (problem → discovery → transformation). Each scene should have a contextually appropriate outfit for that moment.`
-    : `OUTFIT VARIETY: Each scene can have a different outfit.`}
-
-Focus ONLY on the story. Do NOT think about camera angles — that comes later.
-
-Output a JSON object with:
-${mode === "post" ? `- "styling": { "outfit": "...", "hair": "..." } (shared across all scenes)` : ""}
-- "scenes": An array of exactly ${slideCount} scene objects, each with:
-  - "scene_prompt": An object describing what happens:
-    - "action": What the person is doing in this scene. Be specific and visual. Do NOT describe camera angles, shot types, or perspective here. Only describe WHAT is happening. Even for product/food/room shots, include the person's hand or arm in frame (e.g., "hand reaching for the plate"). UGC always has human presence.
-    - "expression": Facial expression. Empty string if face not in scene.
-    - "environment": Specific setting with detail.
-    - "key_item": Main product/object in frame. Empty string if none.
-    ${mode !== "post" ? `- "outfit": What the person is wearing in this specific scene.` : ""}
-  - "caption": A punchy 1-line caption with emoji.
-  - "requires_avatar": true if person's FACE should be visible, false if face is not shown (but hands/body can still be present).
-  - "requires_product": true if the product is featured.`;
-}
-
-// ═══ PHASE 2: ANGLE ASSIGNMENT (Decides how to film each scene) ═══
-async function assignAngles(ai, scenes, mode) {
-  const isAd = mode === "ad";
-  const anglePrompt = `You are a UGC camera director. Given a list of planned scenes, assign the best camera angle for each one.
-
-${isAd ? 
-  `THIS IS A STRICT UGC AD:
-  - Every shot MUST feel "Self-Filmed" by the influencer.
-  - ONLY 3 ALLOWED ANGLES:
-    1. "Selfie": Front camera, face close, influencer holding phone.
-    2. "Mirror Selfie": Influencer films their reflection in a mirror.
-    3. "First-person POV": Back camera pointing at hands/product from eyes.
-  - FORBIDDEN: No tripods. No distance shots. No "invisible friend" filming. No full body shots from far away.
-  - The influencer must logically be holding the camera in every frame.` 
-  : "This is a social media post. Use a mix of angles for variety."}
-
-Think about HOW a real person would film this on their phone:
-- Selfie: Phone held by the person. Face is close. ONE hand is busy holding the phone (not visible).
-- Mirror Selfie: Reflection in mirror. Phone is visible.
-- First-person POV: Camera is at eye-level. We see the person's hands/arms but NOT their face.
-
-RULES FOR IMMERSION:
-- Do NOT mention "a friend", "someone else", or "the camera person" filming. 
-- Do NOT describe the recording device (phone/camera) as being visible in the frame, unless it is a MIRROR selfie.
-- Total hands visible in the frame (hands_visible) must be accurate:
-  - Selfie: MAX 1 hand visible (since the other holds the phone).
-  - Mirror Selfie: 1 or 2 hands visible.
-  - POV: 1 or 2 hands visible.
-  - Tripod (LIFESTYLE POST ONLY): 0, 1, or 2 hands visible.
-
-For each scene, add these fields to scene_prompt:
-- "angle": Natural description of the shot (e.g., "Standard selfie looking up", "Overhead POV", "Full body mirror reflection").
-- "hands_visible": Exact number of hands clearly seen in the image (0, 1, or 2).
-- "hand_action": What the visible hand(s) are doing. If hands_visible is 0, leave empty.
-
-Return the full JSON array.
-SCENES:
-${JSON.stringify(scenes, null, 2)}`;
-
-  try {
-    const res = await ai.models.generateContent({
-      model: TEXT_MODEL,
-      contents: anglePrompt,
-      config: { responseMimeType: "application/json" },
-    });
-
-    const result = JSON.parse(res.text?.trim() || "[]");
-    if (Array.isArray(result) && result.length === scenes.length) {
-      return result;
+OUTPUT FORMAT:
+Generate a JSON object with a "scenes" array. Each scene MUST follow this EXACT structure:
+{
+  "caption": "${captionInstruction}",
+  "requires_avatar": boolean,
+  "requires_product": boolean,
+  "json_prompt": {
+    "subject": {
+      "demographics": "Detailed description of the subject based on Subject Description",
+      "hair": "Specific hair details",
+      "skin_texture": "Describe real skin: visible pores, natural blemishes, matte finish, NO airbrushing",
+      "facial_expression": "Specific emotion and mouth/eye state"
+    },
+    "apparel": {
+      "outfit_style": "Style name",
+      "top": "Detailed description of top piece",
+      "bottoms": "Detailed description of bottom piece",
+      "accessories": "Jewelry, glasses, etc"
+    },
+    "pose_and_action": {
+      "perspective": "Camera angle (Selfie, POV, etc)",
+      "action": "Description of what they are doing with their hands and body",
+      "hands_visible": number (0, 1, or 2),
+      "reflection": "Detail if mirror selfie, else empty"
+    },
+    "environment": {
+      "location": "Detailed setting",
+      "background_elements": "Specific items in background",
+      "flooring": "Detail of floor"
+    },
+    "lighting_and_atmosphere": {
+      "lighting_type": "Natural window light, golden hour, or iPhone flash (DO NOT use studio or cinematic lighting)",
+      "quality": "Tone and intensity details",
+      "mood": "Specific emotional atmosphere"
     }
-    return scenes;
-  } catch (err) {
-    return scenes;
   }
-}
-
-// ═══ PHASE 3: VALIDATOR (Enforces physical rules, fixes issues) ═══
-async function validateScenes(ai, scenes) {
-  const validatorPrompt = `You are a "Physical Reality Checker" for AI-generated photo scene plans.
-
-CRITICAL PHYSICAL AUDIT:
-1. **HAND COUNT AUDIT**: Count the number of hands mentioned in "hand_action". If you describe "both hands" or two separate hands doing things, "hands_visible" MUST be 2. If you only describe one hand, "hands_visible" MUST be 1. 100% agreement required.
-2. **SHOT TYPE AUDIT**: 
-   - If "angle" is a "Selfie" (not mirror), hands_visible CANNOT be 2. One hand is holding the phone.
-   - If "angle" is "POV", requires_avatar MUST be false (we don't see our own face from our eyes).
-   - If "requires_avatar" is false, "expression" MUST be empty.
-3. **UGC IMMERSION**: Ensure no "ghost cameras" or "friends" are mentioned. No hands holding phones should be visible unless it's a mirror.
-
-If a scene fails any audit, fix it by modifying "angle", "hands_visible", or "hand_action" until it is physically possible for ONE person to take the photo.
-
-SCENES:
-${JSON.stringify(scenes, null, 2)}`;
-
-  try {
-    const res = await ai.models.generateContent({
-      model: TEXT_MODEL,
-      contents: validatorPrompt,
-      config: { responseMimeType: "application/json" },
-    });
-
-    const validated = JSON.parse(res.text?.trim() || "[]");
-    if (Array.isArray(validated) && validated.length === scenes.length) {
-      return validated;
-    }
-    return scenes;
-  } catch (err) {
-    return scenes;
-  }
+}`;
 }
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { vibe, mode = "photodump", avatar, productImage, category } = body;
+    const { vibe, mode = "photodump", avatar, productImage } = body;
 
     if (!vibe?.trim()) {
       return NextResponse.json({ error: mode === "ad" ? "Please describe the product" : "Please describe the vibe" }, { status: 400 });
     }
 
     const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: "GOOGLE_API_KEY not configured" }, { status: 500 });
-    }
-
+    if (!apiKey) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
     const ai = new GoogleGenAI({ apiKey });
 
-    // Phase 0: Analyze avatar + product in parallel
+    // Phase 0: Analyze in parallel
     const [personDescription, productDescription] = await Promise.all([
       avatar ? analyzeAvatar(ai, avatar) : null,
       mode === "ad" && productImage ? analyzeProduct(ai, productImage) : null,
     ]);
 
-    console.log("Person:", personDescription);
-    console.log("Product:", productDescription);
-
-    // Phase 1: Creative Planning
-    const prompt = buildPlannerPrompt(vibe.trim(), mode, personDescription, productDescription, category);
-
+    // Phase 1: Consolidated JSON Planning
+    const prompt = buildPlannerPrompt(vibe.trim(), mode, personDescription, productDescription);
     const res = await ai.models.generateContent({
       model: TEXT_MODEL,
       contents: prompt,
       config: { responseMimeType: "application/json" },
     });
 
-    let scenes = [];
-    let styling = null;
+    let rawText = res.text?.trim() || "{}";
+    
+    // Log the raw output before parsing to help debug formatting issues
+    console.log("=== RAW AI OUTPUT ===");
+    console.log(rawText);
+    console.log("=====================");
+
     try {
-      const parsed = JSON.parse(res.text?.trim() || "{}");
-      // Handle both { scenes: [...] } and flat array formats
-      if (parsed.scenes && Array.isArray(parsed.scenes)) {
-        scenes = parsed.scenes;
-        styling = parsed.styling || null;
-      } else if (Array.isArray(parsed)) {
-        scenes = parsed;
-      } else {
-        return NextResponse.json({ error: "Unexpected response format. Try again." }, { status: 500 });
+      // Aggressively clean markdown blocks that Gemini sometimes wraps around JSON
+      if (rawText.startsWith("```json")) {
+        rawText = rawText.replace(/^```json\n?/, "").replace(/\n?```$/, "");
+      } else if (rawText.startsWith("```")) {
+        rawText = rawText.replace(/^```\n?/, "").replace(/\n?```$/, "");
       }
-    } catch {
-      return NextResponse.json({ error: "Failed to parse scenes. Try again." }, { status: 500 });
+
+      const parsed = JSON.parse(rawText.trim());
+      
+      if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
+        throw new Error("Missing 'scenes' array in generated JSON format");
+      }
+      
+      return NextResponse.json({ ...parsed, vibe: vibe.trim(), mode, personDescription, productDescription });
+    } catch (parseError) {
+      console.error("JSON Parse Error:", parseError.message);
+      return NextResponse.json({ error: "Failed to parse AI output. Try again." }, { status: 500 });
     }
-
-    const expectedSlides = mode === "ad" ? 6 : 5;
-    if (scenes.length < 3) {
-      return NextResponse.json({ error: `Got ${scenes.length} scenes instead of ${expectedSlides}.` }, { status: 500 });
-    }
-
-    // Phase 2: Assign camera angles based on scene content
-    console.log("Styling:", JSON.stringify(styling, null, 2));
-    console.log("Raw scenes (story only):", JSON.stringify(scenes, null, 2));
-    const scenesWithAngles = await assignAngles(ai, scenes, mode);
-    console.log("Scenes with angles:", JSON.stringify(scenesWithAngles, null, 2));
-
-    // Phase 3: Validate physical rules
-    const validatedScenes = await validateScenes(ai, scenesWithAngles);
-    console.log("Validated scenes:", JSON.stringify(validatedScenes, null, 2));
-
-    return NextResponse.json({ scenes: validatedScenes, styling, vibe: vibe.trim(), mode, personDescription, productDescription });
   } catch (err) {
     console.error("Plan error:", err.message);
     return NextResponse.json({ error: "An unexpected error occurred." }, { status: 500 });
   }
 }
+
