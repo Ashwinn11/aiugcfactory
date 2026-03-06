@@ -951,82 +951,76 @@ export default function Home() {
                   </p>
                 )}
                 
-                <div className={styles.projectSelector} style={{ marginLeft: "3.5rem", marginBottom: "1rem" }}>
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                    <select 
-                      value={selectedProjectId}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedProjectId(val);
-                        if (val !== "new") {
-                          const p = projects.find(p => p.id === val);
-                          if (p) {
-                            setVibe(p.description);
+                {mode === "ad" && (
+                  <div className={styles.projectSelector} style={{ marginLeft: "3.5rem", marginBottom: "1rem" }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                      <select 
+                        value={selectedProjectId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedProjectId(val);
+                          if (val !== "new") {
+                            const p = projects.find(p => p.id === val);
+                            if (p) setVibe(p.description);
+                          } else {
+                            setVibe("");
                           }
-                        } else {
-                          setVibe("");
-                        }
-                      }}
-                      style={{
-                        padding: '12px',
-                        borderRadius: '8px',
-                        border: '1px solid #333',
-                        background: '#111',
-                        color: '#fff',
-                        width: '100%',
-                        fontSize: '0.9rem'
-                      }}
-                    >
-                      <option value="new">+ Create New Project</option>
-                      {projects.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                        }}
+                        style={{
+                          padding: '12px', borderRadius: '8px',
+                          border: '1px solid #333', background: '#111',
+                          color: '#fff', width: '100%', fontSize: '0.9rem'
+                        }}
+                      >
+                        <option value="new">+ Create New Project</option>
+                        {projects.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {selectedProjectId === "new" && (
-                    <input
-                      type="text"
-                      placeholder="Project Name (e.g., Gutbuddy)"
-                      value={newProjectName}
-                      onChange={(e) => setNewProjectName(e.target.value)}
-                      style={{
-                        padding: '12px',
-                        borderRadius: '8px',
-                        border: '1px solid #333',
-                        background: '#111',
-                        color: '#fff',
-                        width: '100%',
-                        marginBottom: '12px',
-                        fontSize: '0.9rem'
-                      }}
-                    />
-                  )}
-                  {selectedProjectId !== "new" && (
-                    <button
-                      onClick={() => {
-                        setProjects(prev => {
-                          const next = prev.map(p => p.id === selectedProjectId ? { ...p, description: vibe.trim() } : p);
-                          localStorage.setItem("ugc_factory_projects", JSON.stringify(next));
-                          return next;
-                        });
-                        alert("Project description saved!");
-                      }}
-                      style={{
-                        padding: '7px 14px', borderRadius: '8px',
-                        border: '1px solid #444', background: '#1a1a1a',
-                        color: '#aaa', cursor: 'pointer', fontSize: '0.8rem', marginBottom: '8px',
-                      }}
-                    >
-                      💾 Update Project Description
-                    </button>
-                  )}
-                </div>
+                    {selectedProjectId === "new" && (
+                      <input
+                        type="text"
+                        placeholder="Project Name (e.g., Gutbuddy)"
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        style={{
+                          padding: '12px', borderRadius: '8px',
+                          border: '1px solid #333', background: '#111',
+                          color: '#fff', width: '100%',
+                          marginBottom: '12px', fontSize: '0.9rem'
+                        }}
+                      />
+                    )}
+                    {selectedProjectId !== "new" && (
+                      <button
+                        onClick={() => {
+                          setProjects(prev => {
+                            const next = prev.map(p => p.id === selectedProjectId ? { ...p, description: vibe.trim() } : p);
+                            localStorage.setItem("ugc_factory_projects", JSON.stringify(next));
+                            return next;
+                          });
+                          alert("Project description saved!");
+                        }}
+                        style={{
+                          padding: '7px 14px', borderRadius: '8px',
+                          border: '1px solid #444', background: '#1a1a1a',
+                          color: '#aaa', cursor: 'pointer', fontSize: '0.8rem', marginBottom: '8px',
+                        }}
+                      >
+                        💾 Update Project Description
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className={styles.vibeBox}>
                   <textarea
                     className={styles.vibeTextarea}
-                    placeholder={selectedProjectId === "new" ? "Describe your product/app in detail..." : "Project Description"}
+                    placeholder={mode === "ad"
+                      ? (selectedProjectId === "new" ? "Describe your product/app in detail..." : "Project Description")
+                      : (currentMode?.placeholder || "Describe the vibe...")}
                     value={vibe}
                     onChange={(e) => setVibe(e.target.value)}
                     onKeyDown={handleKeyDown}
