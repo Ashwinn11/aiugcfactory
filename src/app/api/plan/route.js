@@ -51,7 +51,8 @@ function getHookStrategies() {
 // ═══ THE CONSOLIDATED JSON PLANNER ═══
 function buildPlannerPrompt(vibe, mode, personDescription, productDescription) {
   const isAd = mode === "ad";
-  const isPost = mode === "post";
+  const isPost = mode === "carousel";      // Post Carousel — single occasion
+  const isPhotodump = mode === "photodump"; // Photo Dump — mixed moments
   const hookStrategies = isAd ? getHookStrategies() : null;
   const slideCount = isAd ? 6 : 5;
 
@@ -64,10 +65,10 @@ function buildPlannerPrompt(vibe, mode, personDescription, productDescription) {
     : "MIXED MODES: Use a mix of 'Selfie', 'Mirror Selfie', 'First-person POV', and 'Standard (Tripod/Distance)' for variety.";
 
   const modeLogic = isPost 
-    ? "OCCASION RULE: This is a single occasion. Every slide must feature the SAME OUTFIT, SAME ACCESSORIES, SAME VIBE, and SAME TIME of day. Character consistency is paramount."
+    ? "SINGLE OCCASION: This is a Post Carousel from ONE event (e.g., a dinner, concert, beach day). Every slide MUST have the SAME OUTFIT, SAME ACCESSORIES, SAME VIBE, and SAME TIME of day. Character consistency is paramount. Do NOT feature any product or brand."
     : isAd 
-    ? "NATURAL FLOW: This ad spans multiple moments (Problem -> Insight -> Transformation). Outfits and locations should change logically to show the story over time."
-    : "RANDOM DUMP: This is a monthly recap. Every slide should feel like a different day/moment with different outfits and locations.";
+    ? "AD CREATIVE: This carousel tells a Problem→Insight→Transformation story for a product. Outfits and locations change logically across slides."
+    : "PHOTO DUMP: This is a casual mixed-moments dump. Every slide should feel like a different day or moment with different outfits, locations, and activities. No product. Pure lifestyle.";
 
   const captionInstruction = isAd 
     ? "Write the spoken caption for this slide — what the influencer is SAYING to the audience (hook, benefit, insight, or CTA). Plain text only. NO markdown, NO asterisks. NEVER write a description of the visual action or what the influencer is physically doing."
