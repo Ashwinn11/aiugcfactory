@@ -112,6 +112,13 @@ export default function Home() {
   const [isExporting, setIsExporting] = useState(false);
   const [isBatchExporting, setIsBatchExporting] = useState(false);
 
+  // Projects
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("new");
+  const [newProjectName, setNewProjectName] = useState("");
+  const [libraryMode, setLibraryMode] = useState("projects"); // "projects" or "packs"
+  const [libraryProjectId, setLibraryProjectId] = useState(null);
+
   // Undo/Redo (Editor specific)
   const [editorHistory, setEditorHistory] = useState([]);
   const [editorHistoryIdx, setEditorHistoryIdx] = useState(-1);
@@ -144,6 +151,12 @@ export default function Home() {
       if (e.touches.length > 1) e.preventDefault();
     };
     document.addEventListener('touchstart', preventPinch, { passive: false });
+
+    // Load projects
+    try {
+      const p = localStorage.getItem("ugc_factory_projects");
+      if (p) setProjects(JSON.parse(p));
+    } catch(e){}
 
     return () => {
       window.removeEventListener('resize', checkMobile);
@@ -448,6 +461,21 @@ export default function Home() {
   // ──── Plan carousel ────
   const handlePlan = useCallback(async () => {
     if (!vibe.trim() || planning || generating) return;
+    
+    // Auto-save project if new
+    let finalProjectId = selectedProjectId;
+    if (selectedProjectId === "new" && newProjectName.trim()) {
+      const newProj = { id: `proj_${Date.now()}`, name: newProjectName.trim(), description: vibe.trim() };
+      setProjects(prev => {
+        const next = [...prev, newProj];
+        localStorage.setItem("ugc_factory_projects", JSON.stringify(next));
+        return next;
+      });
+      finalProjectId = newProj.id;
+      setSelectedProjectId(newProj.id);
+      setNewProjectName("");
+    }
+    
     setPlanning(true);
     setError(null);
     setPlannedScenes(null);
@@ -616,6 +644,7 @@ export default function Home() {
     if (!result?.images) return;
     const newPack = {
       id: `pack_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      projectId: selectedProjectId !== "new" ? selectedProjectId : undefined,
       title: `${result.mode || 'Post'} - ${result.vibe || 'Untitled'}`,
       type: result.mode,
       aspectRatio: result.aspectRatio || "9:16",
@@ -630,7 +659,9 @@ export default function Home() {
     setPacks(prev => [newPack, ...prev]);
     alert("Saved to Library!");
     setView("library");
-  }, []);
+    setLibraryMode("packs");
+    setLibraryProjectId(selectedProjectId !== "new" ? selectedProjectId : null);
+  }, [selectedProjectId]);
 
   const handleRemovePack = useCallback((id) => {
     setPacks(prev => prev.filter(p => p.id !== id));
@@ -657,6 +688,19 @@ export default function Home() {
   }, []);
 
   // Placeholder removed as logic merged into handleExportPack above
+
+  // ──── Delete Project ────
+  const handleDeleteProject = useCallback((projId) => {
+    if (!window.confirm("Delete this project? Its packs will move to Uncategorized.")) return;
+    setProjects(prev => {
+      const next = prev.filter(p => p.id !== projId);
+      localStorage.setItem("ugc_factory_projects", JSON.stringify(next));
+      return next;
+    });
+    setPacks(prev => prev.map(p => p.projectId === projId ? { ...p, projectId: undefined } : p));
+    if (selectedProjectId === projId) setSelectedProjectId("new");
+    if (libraryProjectId === projId) { setLibraryMode("projects"); setLibraryProjectId(null); }
+  }, [selectedProjectId, libraryProjectId]);
 
   // ──── Keyboard shortcut ────
   const handleKeyDown = (e) => {
@@ -890,43 +934,6 @@ export default function Home() {
                   </div>
                 </div>
               )}
-
-              {/* Category selector (ad mode only) */}
-              {mode === "ad" && (
-                <div style={{ marginTop: "0.5rem" }}>
-                  <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.5rem" }}>Product Category</div>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    {[
-                      { id: "home", label: "Home/Interior", icon: "Home", color: "#a8a29e" },
-                      { id: "beauty", label: "Beauty", icon: "Sparkles", color: "#f472b6" },
-                      { id: "fitness", label: "Fitness", icon: "Activity", color: "#4ade80" },
-                      { id: "saas", label: "SaaS/Productivity", icon: "Monitor", color: "#60a5fa" },
-                      { id: "food", label: "Food/Recipe", icon: "Utensils", color: "#fb923c" },
-                    ].map((cat) => (
-                      <button
-                        key={cat.id}
-                        onClick={() => setAdCategory(cat.id)}
-                        style={{
-                          padding: "0.4rem 0.75rem",
-                          borderRadius: "20px",
-                          border: adCategory === cat.id ? `1px solid ${cat.color}` : "1px solid #333",
-                          background: adCategory === cat.id ? `${cat.color}20` : "transparent",
-                          color: adCategory === cat.id ? cat.color : "#666",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                          transition: "all 0.2s",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px"
-                        }}
-                      >
-                        <Icon name={cat.icon} size={14} color={adCategory === cat.id ? cat.color : "#666"} />
-                        {cat.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </section>
 
@@ -943,10 +950,83 @@ export default function Home() {
                     {currentMode.vibeHint}
                   </p>
                 )}
+                
+                <div className={styles.projectSelector} style={{ marginLeft: "3.5rem", marginBottom: "1rem" }}>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <select 
+                      value={selectedProjectId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedProjectId(val);
+                        if (val !== "new") {
+                          const p = projects.find(p => p.id === val);
+                          if (p) {
+                            setVibe(p.description);
+                          }
+                        } else {
+                          setVibe("");
+                        }
+                      }}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: '1px solid #333',
+                        background: '#111',
+                        color: '#fff',
+                        width: '100%',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      <option value="new">+ Create New Project</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedProjectId === "new" && (
+                    <input
+                      type="text"
+                      placeholder="Project Name (e.g., Gutbuddy)"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: '1px solid #333',
+                        background: '#111',
+                        color: '#fff',
+                        width: '100%',
+                        marginBottom: '12px',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  )}
+                  {selectedProjectId !== "new" && (
+                    <button
+                      onClick={() => {
+                        setProjects(prev => {
+                          const next = prev.map(p => p.id === selectedProjectId ? { ...p, description: vibe.trim() } : p);
+                          localStorage.setItem("ugc_factory_projects", JSON.stringify(next));
+                          return next;
+                        });
+                        alert("Project description saved!");
+                      }}
+                      style={{
+                        padding: '7px 14px', borderRadius: '8px',
+                        border: '1px solid #444', background: '#1a1a1a',
+                        color: '#aaa', cursor: 'pointer', fontSize: '0.8rem', marginBottom: '8px',
+                      }}
+                    >
+                      💾 Update Project Description
+                    </button>
+                  )}
+                </div>
+
                 <div className={styles.vibeBox}>
                   <textarea
                     className={styles.vibeTextarea}
-                    placeholder={currentMode?.placeholder || "Describe your vibe..."}
+                    placeholder={selectedProjectId === "new" ? "Describe your product/app in detail..." : "Project Description"}
                     value={vibe}
                     onChange={(e) => setVibe(e.target.value)}
                     onKeyDown={handleKeyDown}
@@ -1073,11 +1153,38 @@ export default function Home() {
       {view === "library" && (
         <section className={styles.stepSection}>
           <div className={styles.libraryHeader}>
-            <div className={styles.stepLabel}>
+            <div className={styles.stepLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {libraryMode === 'packs' && (
+                <button
+                  onClick={() => { setLibraryMode('projects'); setLibraryProjectId(null); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#1a1a1a',
+                    border: '1px solid #333',
+                    borderRadius: '8px',
+                    color: '#ccc',
+                    cursor: 'pointer',
+                    padding: '6px 14px',
+                    fontSize: '0.85rem',
+                    marginRight: '8px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <Icon name="ChevronLeft" size={14} /> Back
+                </button>
+              )}
               <div className={styles.stepNumber}>
-                <Icon name="Star" size={12} fill="#fbbf24" color="#fbbf24" />
+                {libraryMode === 'packs'
+                  ? <Icon name="Folder" size={12} fill={libraryProjectId ? "#fbbf24" : "#888"} color={libraryProjectId ? "#fbbf24" : "#888"} />
+                  : <Icon name="Folder" size={12} fill="#fbbf24" color="#fbbf24" />}
               </div>
-              <div className={styles.stepTitle}>Your Saved Packs</div>
+              <div className={styles.stepTitle}>
+                {libraryMode === 'packs'
+                  ? (libraryProjectId ? (projects.find(p => p.id === libraryProjectId)?.name || 'Project Packs') : 'Uncategorized Packs')
+                  : 'Your Projects'}
+              </div>
             </div>
             <button className={styles.newPackBtn} onClick={() => {
               const newPack = {
@@ -1095,19 +1202,64 @@ export default function Home() {
             </button>
           </div>
           
-          {packs.length === 0 ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>
-                <Icon name="FolderOpen" size={48} strokeWidth={1} />
-              </div>
-              <div className={styles.emptyTitle}>Nothing saved yet</div>
-              <div className={styles.emptyDesc}>
-                Generate some images or create a new pack to see them here.
-              </div>
-            </div>
+          {libraryMode === "projects" ? (
+             <div className={styles.savedGrid}>
+                {/* Uncategorized Folder */}
+                <div 
+                  className={styles.savedCard} 
+                  onClick={() => { setLibraryMode('packs'); setLibraryProjectId(null); }} 
+                  style={{ cursor: 'pointer', background: '#111', border: '1px solid #333', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '160px', borderRadius: '12px' }}
+                >
+                    <Icon name="Folder" size={48} strokeWidth={1} color="#888" />
+                    <div style={{ marginTop: '12px', fontWeight: 'bold' }}>Uncategorized</div>
+                    <div style={{ opacity: 0.6, fontSize: '0.8rem' }}>{packs.filter(p=>!p.projectId).length} Packs</div>
+                </div>
+                {/* Project Folders */}
+                {projects.map(proj => (
+                  <div 
+                    key={proj.id} 
+                    className={styles.savedCard}
+                    style={{ position: 'relative', cursor: 'pointer', background: '#111', border: '1px solid #333', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '160px', borderRadius: '12px' }}
+                  >
+                    <div 
+                      onClick={() => { setLibraryMode('packs'); setLibraryProjectId(proj.id); }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, width: '100%', padding: '16px' }}
+                    >
+                      <Icon name="Folder" size={48} strokeWidth={1} color="#fbbf24" fill="#fbbf24" />
+                      <div style={{ marginTop: '12px', fontWeight: 'bold', textAlign: 'center' }}>{proj.name}</div>
+                      <div style={{ opacity: 0.6, fontSize: '0.8rem' }}>{packs.filter(p=>p.projectId === proj.id).length} Packs</div>
+                      {proj.description && (
+                        <div style={{ opacity: 0.45, fontSize: '0.72rem', marginTop: '6px', textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{proj.description}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteProject(proj.id); }}
+                      style={{
+                        position: 'absolute', top: '8px', right: '8px',
+                        background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+                        borderRadius: '6px', color: '#ef4444', cursor: 'pointer',
+                        padding: '4px 8px', fontSize: '0.75rem', lineHeight: 1
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+             </div>
           ) : (
-            <div className={styles.savedGrid}>
-              {packs.map((pack) => (
+            packs.filter(p => p.projectId === libraryProjectId || (!p.projectId && libraryProjectId === null)).length === 0 ? (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyIcon}>
+                  <Icon name="FolderOpen" size={48} strokeWidth={1} />
+                </div>
+                <div className={styles.emptyTitle}>Nothing saved yet</div>
+                <div className={styles.emptyDesc}>
+                  Generate some images or create a new pack to see them here.
+                </div>
+              </div>
+            ) : (
+              <div className={styles.savedGrid}>
+                {packs.filter(p => p.projectId === libraryProjectId || (!p.projectId && libraryProjectId === null)).map((pack) => (
                 <div key={pack.id} className={styles.savedCard}>
                   <div className={styles.savedImageWrapper} style={{ 
                     aspectRatio: pack.aspectRatio ? pack.aspectRatio.replace(':', '/') : '9/16',
@@ -1207,6 +1359,7 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            )
           )}
         </section>
       )}
@@ -1269,9 +1422,48 @@ export default function Home() {
                   <div 
                     key={i} 
                     className={editorIdx === i ? styles.thumbItemActive : styles.thumbItem}
+                    style={{ position: 'relative' }}
                     onClick={() => setEditorIdx(i)}
                   >
                     <img src={img.image} alt={`Slide ${i+1}`} />
+                    {/* Per-slide action buttons */}
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      display: 'flex', gap: '2px', padding: '3px',
+                      background: 'rgba(0,0,0,0.65)',
+                      opacity: editorIdx === i ? 1 : 0,
+                      transition: 'opacity 0.15s',
+                    }}
+                    className={styles.thumbActions}
+                    >
+                      {/* Replace */}
+                      <label title="Replace Image" style={{ flex: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
+                        <Icon name="RefreshCw" size={11} color="#fff" />
+                        <input type="file" hidden accept="image/*" onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const nextImages = editingPack.images.map((im, idx) =>
+                              idx === i ? { ...im, image: reader.result } : im
+                            );
+                            commitToHistory({ ...editingPack, images: nextImages });
+                          };
+                          reader.readAsDataURL(file);
+                        }} />
+                      </label>
+                      {/* Delete */}
+                      <button title="Delete Slide" onClick={(e) => {
+                        e.stopPropagation();
+                        if (editingPack.images.length === 1) return;
+                        if (!window.confirm("Remove this slide?")) return;
+                        const nextImages = editingPack.images.filter((_, idx) => idx !== i);
+                        commitToHistory({ ...editingPack, images: nextImages });
+                        setEditorIdx(prev => Math.min(prev, nextImages.length - 1));
+                      }} style={{ flex: 1, background: 'rgba(239,68,68,0.7)', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Icon name="X" size={11} color="#fff" />
+                      </button>
+                    </div>
                   </div>
                 ))}
                 <label className={styles.addThumbBtn}>

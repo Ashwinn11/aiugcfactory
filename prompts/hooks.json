@@ -94,6 +94,67 @@
                 "Curious how some creators [achievement] overnight?"
             ],
             "why_it_works": "Creates an open loop in the viewer's mind that demands closure."
+        },
+        {
+            "id": "i_tried_everything",
+            "name": "The 'I Tried Everything' Hook",
+            "description": "Lead with exhaustion and failure before revealing the discovery. Creates immediate empathy.",
+            "formulas": [
+                "I tried EVERY [solution] until I found this...",
+                "After [number] failed attempts, THIS finally worked...",
+                "Nothing worked for my [problem] until I tried this...",
+                "I gave up on [category] apps — until this one changed everything"
+            ],
+            "why_it_works": "Audience who has already tried and failed self-identifies immediately. The promise of a real solution after real struggle feels earned, not salesy."
+        },
+        {
+            "id": "before_after_habit",
+            "name": "The Before/After Habit List Hook (Fekri Format)",
+            "description": "List X habits/actions that led to a transformation, softly plugging the product as one of them. Show real before/after proof.",
+            "formulas": [
+                "[number] habits that helped me [positive outcome] 🍃",
+                "What I changed to finally fix my [problem] (this actually works)",
+                "[number] things I do daily that eliminated my [symptom]",
+                "The [number]-step routine that cleared my [problem] in [timeframe]"
+            ],
+            "why_it_works": "Feels like genuine lifestyle advice, not an ad. The product is one of many habits so it feels organic. Before/after proof adds credibility."
+        },
+        {
+            "id": "bold_claim",
+            "name": "The Bold Claim Hook",
+            "description": "Make a specific, almost unbelievable claim backed up with on-screen proof or stats.",
+            "formulas": [
+                "The app that fixed my [problem] in [short timeframe]",
+                "I lost [specific result] in [timeframe] using just this one tool",
+                "[Claim] — I have the screenshots to prove it",
+                "This [product] gave me [specific result] I couldn't get in [X years of trying]"
+            ],
+            "why_it_works": "Specific numbers create credibility. The implied proof in 'I have receipts' triggers curiosity to see the evidence."
+        },
+        {
+            "id": "social_challenge",
+            "name": "The Social Challenge / Bet Hook",
+            "description": "Frame the journey as a challenge or bet with someone else. Creates narrative tension and a rooting interest.",
+            "formulas": [
+                "My [sibling/friend] bet me $[amount] I couldn't [achieve goal] — then I showed them this 😏",
+                "I challenged myself to [goal] for [timeframe]. Here's what happened...",
+                "My doctor said I couldn't [outcome]. I proved them wrong with this."
+            ],
+            "why_it_works": "Social stakes create narrative tension. Viewers root for the underdog and stay to see the outcome."
+        },
+        {
+            "id": "condition_specific",
+            "name": "The Condition-Specific Identity Hook",
+            "description": "Target a viewer's exact diagnosis or condition by name. Hyper-specific identity targeting makes the viewer feel the content was made FOR them.",
+            "formulas": [
+                "If you have [specific condition], you need to hear this...",
+                "Things people without [condition] don't understand 😮‍💨",
+                "POV: you have [condition] and you just found out about [solution]",
+                "Rating [product/food/habit] as someone with [specific condition]",
+                "Does [common trigger] bother anyone else with [condition]?",
+                "[Number] bizarre [condition] hacks my [doctor/specialist] taught me (that actually work)"
+            ],
+            "why_it_works": "The algo tunes to the exact audience dealing with this condition. Conversion rates are much higher because the viewer feels the product was built specifically for their situation."
         }
     ],
     "enhancements": {
