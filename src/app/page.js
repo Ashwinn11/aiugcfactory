@@ -349,7 +349,7 @@ export default function Home() {
                 id: p.id,
                 title: p.caption || "Untitled Pack",
                 type: p.mode || "photodump",
-                aspectRatio: "9:16",
+                aspectRatio: "3:4",
                 images: [{ image: p.image, overlays: p.overlays || [] }],
                 savedAt: p.savedAt || Date.now()
               } : p));
@@ -647,7 +647,7 @@ export default function Home() {
       projectId: selectedProjectId !== "new" ? selectedProjectId : undefined,
       title: `${result.mode || 'Post'} - ${result.vibe || 'Untitled'}`,
       type: result.mode,
-      aspectRatio: result.aspectRatio || "9:16",
+      aspectRatio: result.aspectRatio || "3:4",
       images: result.images.map(img => ({
         image: img.image,
         caption: img.caption,
@@ -764,14 +764,15 @@ export default function Home() {
                           id: `auto_${Date.now()}_${Math.random()}`,
                           text: img.caption,
                           x: 50,
-                          y: 80,
-                          fontSize: 24,
+                          y: 75,
+                          fontSize: 0,
                           color: "#ffffff",
-                          bgMode: "solid",
+                          bgMode: "outline",
                           rotation: 0,
-                          size: 30
+                          size: 35
                         }] : []
-                      }))
+                      })),
+                      aspectRatio: "3:4"
                     };
                   }
                   setEditingPack(packToEdit);
@@ -1279,8 +1280,8 @@ export default function Home() {
                         ` : '';
 
                         // Use cqw (container query width) for text scaling
-                        const scaleRatio = (ov.size || 30) / 30;
-                        const fontCqw = ((ov.fontSize || 24) / 540) * 100;
+                        const scaleRatio = (ov.size || 35) / 35;
+                        const fontCqw = ((ov.fontSize || 0) / 540) * 100;
                         
                         return (
                           <div key={idx} className={`${styles.textOverlay} ${styles['overlay_' + (ov.font || 'classic')]} ${styles['bg_' + (ov.bgMode || 'none')]} ${styles['text_' + (ov.align || 'center')]}`} style={{
@@ -1323,14 +1324,15 @@ export default function Home() {
                               id: `auto_${Date.now()}_${Math.random()}`,
                               text: img.caption,
                               x: 50,
-                              y: 80,
-                              fontSize: 24,
+                              y: 75,
+                              fontSize: 0,
                               color: "#ffffff",
-                              bgMode: "none",
+                              bgMode: "outline",
                               rotation: 0,
-                              size: 30
+                              size: 35
                             }] : []
-                          }))
+                          })),
+                          aspectRatio: "3:4"
                         };
                       }
                       setEditingPack(packToEdit);
@@ -1577,8 +1579,8 @@ export default function Home() {
                             ` : '';
                             
                             // Responsive text scaling
-                            const scaleRatio = (ov.size || 30) / 30;
-                            const fontCqw = ((ov.fontSize || 24) / 540) * 100;
+                            const scaleRatio = (ov.size || 35) / 35;
+                            const fontCqw = ((ov.fontSize || 0) / 540) * 100;
 
                             return (
                               <div 
@@ -1721,8 +1723,8 @@ export default function Home() {
                     const nextImages = [...editingPack.images];
                     const currentImg = nextImages[editorIdx];
                     currentImg.overlays = [...(currentImg.overlays || []), { 
-                      text: "NEW TEXT", x: 50, y: 50, size: 30, color: "#ffffff", 
-                      font: 'classic', bgMode: 'none', align: 'center', rotation: 0 
+                      text: "NEW TEXT", x: 50, y: 75, size: 35, color: "#ffffff", 
+                      fontSize: 0, font: 'classic', bgMode: 'outline', align: 'center', rotation: 0 
                     }];
                     commitToHistory({...editingPack, images: nextImages});
                     setActiveOverlayIdx(currentImg.overlays.length - 1);
@@ -1879,8 +1881,8 @@ export default function Home() {
                       <div className={styles.rangeItem}>
                         <div className={styles.rangeLabel}>Font Size</div>
                         <input 
-                          type="range" min="12" max="100" step="1"
-                          value={ov.fontSize || 24}
+                          type="range" min="0" max="100" step="1"
+                          value={ov.fontSize || 0}
                           onChange={(e) => {
                             const nextImages = [...editingPack.images];
                             nextImages[editorIdx].overlays[idx].fontSize = parseInt(e.target.value);
@@ -1916,8 +1918,8 @@ export default function Home() {
                     return;
                   }
                   currentImg.overlays = [...(currentImg.overlays || []), { 
-                    text: "NEW TEXT", x: 50, y: 50, size: 30, color: "#ffffff", 
-                    font: 'classic', bgMode: 'none', align: 'center', rotation: 0 
+                    text: "NEW TEXT", x: 50, y: 75, size: 35, color: "#ffffff", 
+                    fontSize: 0, font: 'classic', bgMode: 'outline', align: 'center', rotation: 0 
                   }];
                   commitToHistory({...editingPack, images: nextImages});
                 }}>
