@@ -35,18 +35,28 @@ export async function POST(request) {
         const contents = [];
 
         // Attach visual references if required
-        if (avatar && scene.requires_avatar) {
+        // Use the pre-calculated high-fidelity JSON prompt from the plan
+        const jsonPrompt = scene.json_prompt || {};
+        const isPOV = jsonPrompt.pose_and_action?.perspective?.toLowerCase().includes("first-person");
+
+        // Attach visual references if required
+        // OMIT avatar reference if it's a POV shot, to avoid forcing a face into the frame
+        if (avatar && scene.requires_avatar && !isPOV) {
           contents.push({ inlineData: { data: avatar.base64, mimeType: avatar.mimeType || "image/png" } });
         }
         if (productImage && scene.requires_product) {
           contents.push({ inlineData: { data: productImage.base64, mimeType: productImage.mimeType || "image/png" } });
         }
-
-        // Use the pre-calculated high-fidelity JSON prompt from the plan
-        const jsonPrompt = scene.json_prompt || {};
         
         // Inject identity reference into the prompt if avatar is provided
-        if (avatar && scene.requires_avatar) {
+        if (isPOV) {
+          if (jsonPrompt.subject) {
+            delete jsonPrompt.subject.facial_expression;
+            delete jsonPrompt.subject.hair;
+            delete jsonPrompt.subject.demographics;
+            jsonPrompt.subject.identity = "CRITICAL: First-person POV. The subject's face is NOT visible. ONLY hands/arms may be visible. DO NOT draw a face.";
+          }
+        } else if (avatar && scene.requires_avatar) {
           if (jsonPrompt.subject) {
             jsonPrompt.subject.identity = "EXACTLY this person (use the reference photo provided). Match face, features, and skin tone perfectly.";
           }

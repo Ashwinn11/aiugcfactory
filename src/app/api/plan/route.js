@@ -79,7 +79,7 @@ function buildPlannerPrompt(vibe, mode, personDescription, productDescription) {
 USER INPUT:
 - Mode: ${mode} (Rules: ${modeLogic})
 - Subject Description: ${personDescription || "Generic attractive person"}
-- Product Description: ${productDescription || "None"}
+- Product Description: ${productDescription || (isAd ? "None provided but product is required" : "None")}
 - Vibe/Instruction: ${vibe}
 
 CAMERA & PHYSICAL REALITY RULES — READ EVERY WORD (CRITICAL — NON-NEGOTIABLE):
@@ -97,7 +97,7 @@ SCENE AUTHENTICITY RULES (Real life common sense):
 - If the subject is relaxed or cozy — they are sitting on a couch, bed, or floor, not standing.
 - Think: What would a real person ACTUALLY do in this emotional moment? Where would they physically be?
 
-STRATEGY (For Ads Slide 1):
+${isAd ? `STRATEGY (For Ads Slide 1):
 ${hookMenu}
 
 HOOK RULE: For Slide 1, pick EXACTLY ONE formula from the list above. Use it cleanly and adapt it to the product. Do NOT blend, combine, or merge multiple formulas into one caption. Keep the Slide 1 hook under 12 words.
@@ -123,7 +123,8 @@ GOOD CTAs (use these patterns instead):
 - "I use [App Name] instead of [famous alternative] because [specific reason]"
 - "The app is [App Name] — it's free to try"
 - "[App Name] changed how I [outcome] — it's in my bio"
-The CTA must feel like a word-of-mouth recommendation from a friend, not an advertisement.
+The CTA must feel like a word-of-mouth recommendation from a friend, not an advertisement.` : `CAROUSEL GENERAL STRUCTURE:
+Create a ${slideCount}-slide carousel. Each slide should visually and conceptually advance the storyline based on the user's vibe.`}
 
 Caption for each slide must match its narrative role — not describe the visual.
 
@@ -138,7 +139,7 @@ Generate a JSON object with a "scenes" array. Each scene MUST follow this EXACT 
       "demographics": "Detailed description of the subject based on Subject Description",
       "hair": "Specific hair details",
       "skin_texture": "Describe real skin: visible pores, natural blemishes, matte finish, NO airbrushing",
-      "facial_expression": "Specific emotion and mouth/eye state"
+      "facial_expression": "Specific emotion and mouth/eye state (MUST be 'Not visible' if First-person POV)"
     },
     "apparel": {
       "outfit_style": "Style name",
