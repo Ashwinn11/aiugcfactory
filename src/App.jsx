@@ -30,7 +30,6 @@ function App() {
         const ctx = canvas.getContext('2d');
 
         const zoom = 1.03;
-        const rotation = (Math.random() * 1 + 1) * (Math.PI / 180) * (Math.random() > 0.5 ? 1 : -1);
         const borderSize = Math.floor(Math.random() * 3) + 2;
         const borderColor = `rgb(${Math.random() * 255},${Math.random() * 255},${Math.random() * 255})`;
 
@@ -61,7 +60,6 @@ function App() {
 
           ctx.save();
           ctx.translate(canvas.width / 2, canvas.height / 2);
-          ctx.rotate(rotation);
           ctx.scale(zoom, zoom);
 
           const drawWidth = canvas.width - (borderSize * 2);

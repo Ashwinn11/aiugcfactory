@@ -8,7 +8,6 @@ This tool implements a multi-layered bypass workflow derived from reverse-engine
 
 1.  **Industrial Hashing (FFmpeg Style)**:
     *   **Zoom**: 1.03x scaling to shift the spatial grid.
-    *   **Rotation**: 1-2 degree randomized rotation.
     *   **Borders**: 2-4px randomized color borders to alter edge detection hashes.
 2.  **Invisible Noise Overlay**: Procedural grain layer (2-4% opacity) that is invisible to the human eye but breaks classical fingerprinting algorithms.
 3.  **Heavy Artillery (Pixel Reconstruction)**: High-quality upscale/downscale resampling cycle (1.5x) to completely reconstruct the pixel grid.
