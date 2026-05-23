@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Download, RefreshCw, Image as ImageIcon, AlertCircle, Trash2 } from 'lucide-react';
+import { Upload, Download, RefreshCw, Image as ImageIcon, AlertCircle, Trash2, Share2 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import './App.css';
@@ -198,6 +198,26 @@ function App() {
     saveAs(content, "ai-ugc-factory-deployment.zip");
   };
 
+  const shareAll = async () => {
+    const files = results.map((res, index) => {
+      const byteString = atob(res.blob);
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+      return new File([ab], `${res.sourceName.split('.')[0]}-bypass-${index + 1}.jpg`, { type: 'image/jpeg' });
+    });
+
+    if (navigator.canShare && navigator.canShare({ files })) {
+      try {
+        await navigator.share({ files, title: 'UGC Factory Images' });
+      } catch (err) {
+        if (err.name !== 'AbortError') setError('Share failed: ' + err.message);
+      }
+    } else {
+      downloadAll();
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="mesh-bg" />
@@ -259,8 +279,11 @@ function App() {
                   <button className="btn-ghost-mini" onClick={() => setResults([])}>
                     <Trash2 size={16} /> Clear
                   </button>
-                  <button className="btn-primary-mini" onClick={downloadAll}>
-                    <Download size={18} /> Download ZIP
+                  <button className="btn-primary-mini" onClick={shareAll}>
+                    <Share2 size={18} /> Save to Photos
+                  </button>
+                  <button className="btn-ghost-mini" onClick={downloadAll}>
+                    <Download size={16} /> ZIP
                   </button>
                 </div>
               )}
