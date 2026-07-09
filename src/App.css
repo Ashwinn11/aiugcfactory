@@ -1,30 +1,14 @@
 :root {
   --bg-primary: #050505;
   --bg-secondary: #0a0a0a;
-  --accent-primary: #00f2ff;
-  --accent-secondary: #7000ff;
+  /* TikTok brand duo (kept in sync with index.css): teal = accent, red = CTA */
+  --accent-primary: #25F4EE;
+  --accent-cta: #FE2C55;
   --text-primary: #ffffff;
   --text-muted: #a0a0a0;
   --border-color: rgba(255, 255, 255, 0.1);
   --glass-bg: rgba(255, 255, 255, 0.05);
-  --font-heading: 'Outfit', sans-serif;
-  --font-body: 'Inter', sans-serif;
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
-body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  overflow-x: hidden;
-  line-height: 1.5;
 }
 
 .app-container {
@@ -39,9 +23,9 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: 
-    radial-gradient(circle at 0% 0%, rgba(0, 242, 255, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(112, 0, 255, 0.08) 0%, transparent 40%);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(37, 244, 238, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(254, 44, 85, 0.08) 0%, transparent 40%);
   z-index: -1;
 }
 
@@ -60,8 +44,8 @@ body {
 }
 
 .logo {
-  font-family: var(--font-heading);
-  font-weight: 800;
+  font-family: var(--font-ui);
+  font-weight: 700;
   font-size: clamp(1rem, 4vw, 1.3rem);
   letter-spacing: -0.5px;
   white-space: nowrap;
@@ -79,7 +63,7 @@ body {
 
 .status-badge {
   font-size: 0.65rem;
-  background: rgba(0, 242, 255, 0.1);
+  background: rgba(37, 244, 238, 0.1);
   color: var(--accent-primary);
   padding: 0.3rem 0.6rem;
   border-radius: 6px;
@@ -103,14 +87,14 @@ body {
 
 .hero-compact h1 {
   font-size: clamp(2.2rem, 8vw, 3.5rem);
-  font-family: var(--font-heading);
+  font-family: var(--font-ui);
   margin-bottom: 0.5rem;
   line-height: 1.1;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .hero-compact h1 span {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-cta));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -167,7 +151,7 @@ body {
 
 .dropzone-large:hover {
   border-color: var(--accent-primary);
-  background: rgba(0, 242, 255, 0.05);
+  background: rgba(37, 244, 238, 0.05);
   transform: translateY(-4px);
 }
 
@@ -176,8 +160,8 @@ body {
 }
 
 .dropzone-large.processing {
-  border-color: var(--accent-secondary);
-  background: rgba(112, 0, 255, 0.08);
+  border-color: var(--accent-cta);
+  background: rgba(254, 44, 85, 0.08);
   cursor: wait;
 }
 
@@ -216,7 +200,7 @@ body {
 }
 
 .panel-header h3 {
-  font-family: var(--font-heading);
+  font-family: var(--font-ui);
   font-size: 1.1rem;
   letter-spacing: 0.5px;
 }
@@ -241,10 +225,16 @@ body {
   transition: all 0.2s ease;
 }
 
+/* Neutral hover by default; only explicitly-destructive buttons flash red */
 .btn-ghost-mini:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #ff4d4d;
-  border-color: rgba(255, 77, 77, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-ghost-mini.danger:hover {
+  color: var(--accent-cta);
+  border-color: rgba(254, 44, 85, 0.25);
 }
 
 .btn-primary-mini {
@@ -253,7 +243,7 @@ body {
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 12px;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 0.8rem;
   display: flex;
   align-items: center;
@@ -265,7 +255,7 @@ body {
 
 .btn-primary-mini:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 242, 255, 0.4);
+  box-shadow: 0 4px 20px rgba(37, 244, 238, 0.4);
 }
 
 .gallery-grid-compact {
@@ -311,9 +301,9 @@ body {
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--accent-primary);
-  border: 1px solid rgba(0, 242, 255, 0.2);
+  border: 1px solid rgba(37, 244, 238, 0.2);
 }
 
 .loading-placeholder {
@@ -322,9 +312,9 @@ body {
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(112, 0, 255, 0.05);
-  border: 1px dashed var(--accent-secondary);
-  color: var(--accent-secondary);
+  background: rgba(37, 244, 238, 0.05);
+  border: 1px dashed var(--accent-primary);
+  color: var(--accent-primary);
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -358,9 +348,9 @@ body {
 }
 
 .error-box {
-  background: rgba(255, 77, 77, 0.1);
-  border: 1px solid rgba(255, 77, 77, 0.2);
-  color: #ff4d4d;
+  background: rgba(254, 44, 85, 0.1);
+  border: 1px solid rgba(254, 44, 85, 0.2);
+  color: var(--accent-cta);
   padding: 1rem;
   border-radius: 16px;
   display: flex;
