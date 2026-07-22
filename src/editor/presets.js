@@ -10,7 +10,7 @@ export const LAYER_PACKS = [
     build: () => [
       createTextLayer({
         text: '5 signs your\ngut is inflamed',
-        xPct: 8, yPct: 9, widthPct: 84,
+        xPct: 8, yPct: 20, widthPct: 84,
         fontSize: 108, style: 'normal', align: 'center',
       }),
       createTextLayer({
@@ -26,7 +26,7 @@ export const LAYER_PACKS = [
     build: () => [
       createTextLayer({
         text: 'Miso Butter\nSalmon',
-        xPct: 10, yPct: 64, widthPct: 80,
+        xPct: 10, yPct: 58, widthPct: 80,
         fontSize: 120, style: 'normal', align: 'center',
       }),
     ],
@@ -37,7 +37,7 @@ export const LAYER_PACKS = [
     build: () => [
       createTextLayer({
         text: 'watch till\nthe end',
-        xPct: 8, yPct: 10, widthPct: 84,
+        xPct: 8, yPct: 20, widthPct: 84,
         fontSize: 128, style: 'overlay', color: '#ffffff', align: 'center',
       }),
     ],

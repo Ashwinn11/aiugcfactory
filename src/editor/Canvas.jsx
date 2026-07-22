@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion as Motion, useMotionValue, useDragControls } from 'framer-motion';
 import { X, RotateCw, Maximize2, Film } from 'lucide-react';
-import { autoContrast, OUTLINE_RATIO } from './textLayers.js';
+import { autoContrast, OUTLINE_RATIO, clampYToSafeZone, SAFE_ZONE_TOP, SAFE_ZONE_BOTTOM } from './textLayers.js';
 import { ensureFontsLoaded } from './fonts.js';
 import { layoutLayer, buildBackgroundPath } from './layout.js';
 
@@ -157,7 +157,12 @@ function DraggableLayer({ layer, format, scale, displayW, displayH, selected, on
     const startSize = layer.fontSize;
     startHandleDrag(e, (ev) => {
       const d = Math.hypot(ev.clientX - cx, ev.clientY - cy);
-      onChange(layer.id, { fontSize: clamp(Math.round(startSize * (d / startDist)), 14, 400) });
+      const fontSize = clamp(Math.round(startSize * (d / startDist)), 14, 400);
+      // growing the box can push its bottom edge past the safe zone — pull the
+      // top back up (never down) to keep it fully inside as it grows
+      const trialH = layoutLayer({ ...layer, fontSize }, format).totalH;
+      const yPct = clampYToSafeZone(layer.yPct, (trialH / format.h) * 100);
+      onChange(layer.id, { fontSize, yPct });
     });
   };
 
@@ -205,13 +210,15 @@ function DraggableLayer({ layer, format, scale, displayW, displayH, selected, on
       onPointerDown={(e) => { onSelect(layer.id); if (!editing) dragControls.start(e); }}
       onDoubleClick={() => setEditing(true)}
       onDragEnd={(_, info) => {
-        // clamp the box CENTRE on-stage (2% inset): the centre is
-        // rotation-invariant, so the layer always keeps a grabbable region and
-        // can never be parked fully off-canvas and lost
+        // x: clamp the box CENTRE on-stage (2% inset) — rotation-invariant, so
+        // the layer always keeps a grabbable region and can never be parked
+        // fully off-canvas and lost.
+        // y: hard-clamp the whole box inside the vertical safe zone — text can
+        // never be dragged under TikTok's top/bottom chrome.
         const boxWPct = (boxW / format.w) * 100;
         const boxHPct = (totalH / format.h) * 100;
         const nx = clamp(layer.xPct + (info.offset.x / displayW) * 100, 2 - boxWPct / 2, 98 - boxWPct / 2);
-        const ny = clamp(layer.yPct + (info.offset.y / displayH) * 100, 2 - boxHPct / 2, 98 - boxHPct / 2);
+        const ny = clampYToSafeZone(layer.yPct + (info.offset.y / displayH) * 100, boxHPct);
         x.set(0);
         y.set(0);
         onChange(layer.id, { xPct: round1(nx), yPct: round1(ny) });
@@ -376,6 +383,10 @@ export default function Canvas({ slide, format, selectedLayerId, onSelectLayer, 
               onDelete={onDeleteLayer}
             />
           ))}
+
+          {/* safe-zone guide: text is clamped between these lines, so show where they are */}
+          <div className="ed-safe-guide" style={{ top: `${SAFE_ZONE_TOP}%` }} />
+          <div className="ed-safe-guide" style={{ top: `${100 - SAFE_ZONE_BOTTOM}%` }} />
         </div>
       )}
     </div>

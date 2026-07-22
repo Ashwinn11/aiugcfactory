@@ -79,6 +79,16 @@
   padding: 0.25rem 0.6rem;
   white-space: nowrap;
 }
+.ed-lock-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent-primary, #25F4EE);
+  background: var(--sel-bg);
+  border: 1px solid var(--sel-border);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  white-space: nowrap;
+}
 
 /* ---------- Buttons ---------- */
 .ed-btn {
@@ -111,6 +121,12 @@
   opacity: 1;
 }
 .ed-btn-ghost { background: transparent; }
+.ed-btn-lock-active {
+  background: var(--sel-bg);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.ed-btn-lock-active:hover:not(:disabled) { background: var(--sel-bg); border-color: var(--accent-primary); }
 
 /* keyboard wayfinding — every interactive control gets a visible ring */
 :where(.ed-btn, .ed-mini-btn, .ed-seg button, .ed-format-btn, .ed-pack-btn,
@@ -193,6 +209,17 @@
 .ed-relink p { font-size: 0.8rem; line-height: 1.5; }
 .ed-layer { will-change: transform; }
 .ed-layer.selected { outline: 1.5px dashed rgba(255, 255, 255, 0.9); outline-offset: 4px; }
+
+/* safe-zone guide: marks the 20%/80% lines text is clamped between */
+.ed-safe-guide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+  z-index: 5;
+}
 
 /* drop-target state (file dragged over the center pane) */
 .ed-dropping .ed-stage {

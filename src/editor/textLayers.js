@@ -23,6 +23,25 @@ export const PAD_X_RATIO = 0.32;    // horizontal padding  = fontSize * this
 export const RADIUS_RATIO = 0.22;   // overlay corner radius = fontSize * this
 export const OUTLINE_RATIO = 0.09;  // stroke width          = fontSize * this
 
+// Vertical safe zone: TikTok's own chrome (search bar / top nav; caption,
+// like/comment rail, sound ticker at the bottom) sits over the top and bottom
+// of the frame. Text is kept inside the middle band so it never sits under it.
+export const SAFE_ZONE_TOP = 20;    // % of format height reserved empty at top
+export const SAFE_ZONE_BOTTOM = 20; // % of format height reserved empty at bottom
+
+// Clamp a layer's yPct (box top) so the box stays fully inside the vertical
+// safe zone. boxHPct is the layer's rendered height as % of format height —
+// callers get it from layoutLayer(layer, format).totalH / format.h * 100.
+// If the box is taller than the zone itself, pin to the top of the zone
+// rather than centering it: predictable "grows downward" behaviour that
+// matches the resize handle.
+export function clampYToSafeZone(yPct, boxHPct) {
+  const minY = SAFE_ZONE_TOP;
+  const maxY = 100 - SAFE_ZONE_BOTTOM - boxHPct;
+  if (maxY < minY) return minY;
+  return Math.min(Math.max(yPct, minY), maxY);
+}
+
 // The three TikTok styles.
 export const STYLES = [
   { id: 'normal', label: 'Normal' },
@@ -45,7 +64,7 @@ export function createTextLayer(overrides = {}) {
     id: uid('layer'),
     text: DEFAULT_LAYER_TEXT,
     xPct: 10,          // box top-left, % of format
-    yPct: 10,
+    yPct: SAFE_ZONE_TOP, // top of the vertical safe zone by default
     widthPct: 80,      // wrap width, % of format (not user-exposed)
     fontId: DEFAULT_FONT_ID,
     fontSize: 96,      // native px, driven by the resize handle

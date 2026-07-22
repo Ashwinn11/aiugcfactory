@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Type, Download, Package, Loader2, Film, ImagePlus, FilePlus } from 'lucide-react';
+import { Type, Download, Package, Loader2, Film, ImagePlus, FilePlus, Lock, Unlock } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
 import { getFormat, DEFAULT_FORMAT_ID } from '../formats/formats.js';
-import { createTextLayer, uid } from './textLayers.js';
+import { createTextLayer, uid, DEFAULT_LAYER_TEXT, clampYToSafeZone } from './textLayers.js';
+import { layoutLayer } from './layout.js';
 import { getPack } from './presets.js';
 import { renderSlide } from './renderSlide.js';
 import { exportVideo } from './exportVideo.js';
@@ -112,12 +113,13 @@ function loadInitial() {
           formatId: data.formatId || DEFAULT_FORMAT_ID,
           slides: data.slides,
           currentSlideId: cur,
+          globalLock: !!data.globalLock,
         };
       }
     }
   } catch { /* ignore corrupt storage */ }
-  const first = newSlide(null, [createTextLayer({ text: SEED_TEXT, yPct: 12 })]);
-  return { formatId: DEFAULT_FORMAT_ID, slides: [first], currentSlideId: first.id };
+  const first = newSlide(null, [createTextLayer({ text: SEED_TEXT })]);
+  return { formatId: DEFAULT_FORMAT_ID, slides: [first], currentSlideId: first.id, globalLock: false };
 }
 
 export default function Editor({ viewSwitcher = null, active = true }) {
@@ -131,6 +133,7 @@ export default function Editor({ viewSwitcher = null, active = true }) {
   const [toast, setToast] = useState(null); // { kind:'error'|'info', msg, action?:{label,onClick} }
   const [storageFull, setStorageFull] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const [globalLock, setGlobalLock] = useState(initial.globalLock);
   const fileRef = useRef(null);
   const rightRef = useRef(null);
   const cancelRef = useRef(null);
@@ -182,7 +185,7 @@ export default function Editor({ viewSwitcher = null, active = true }) {
   const saveNow = useCallback(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        formatId, slides: serialiseSlides(slides), currentSlideId,
+        formatId, slides: serialiseSlides(slides), currentSlideId, globalLock,
       }));
       setStorageFull(false);
     } catch (err) {
@@ -190,7 +193,7 @@ export default function Editor({ viewSwitcher = null, active = true }) {
       // edits on reload is worse than a chip; other errors (private mode) stay quiet
       if (err?.name === 'QuotaExceededError' || err?.code === 22) setStorageFull(true);
     }
-  }, [formatId, slides, currentSlideId]);
+  }, [formatId, slides, currentSlideId, globalLock]);
 
   useEffect(() => {
     const t = setTimeout(saveNow, 500);
@@ -225,17 +228,28 @@ export default function Editor({ viewSwitcher = null, active = true }) {
     }
     if (!created.length) return;
     commit();
+    // while locked, new slides shouldn't land with an empty layout — they
+    // inherit Slide 1's current layer template (own text, same everything else)
+    const cloneTemplate = (template) => template.map((tl) => ({ ...tl, id: uid('layer'), text: DEFAULT_LAYER_TEXT }));
     setSlides((prev) => {
       const starter = prev.length === 1 && !prev[0].media ? prev[0] : null;
-      if (!starter) return [...prev, ...created];
+      if (!starter) {
+        const withLayers = globalLock && prev[0]?.layers.length
+          ? created.map((s) => ({ ...s, layers: cloneTemplate(prev[0].layers) }))
+          : created;
+        return [...prev, ...withLayers];
+      }
       const pristine = starter.layers.length === 0 ||
         (starter.layers.length === 1 && starter.layers[0].text === SEED_TEXT);
       if (pristine) return created; // disposable placeholder: replace outright
       // the user already wrote their hook — carry it onto the first upload
-      return [{ ...created[0], layers: starter.layers }, ...created.slice(1)];
+      const rest = globalLock
+        ? created.slice(1).map((s) => ({ ...s, layers: cloneTemplate(starter.layers) }))
+        : created.slice(1);
+      return [{ ...created[0], layers: starter.layers }, ...rest];
     });
     setCurrentSlideId(created[0].id);
-  }, [commit]);
+  }, [commit, globalLock]);
 
   // re-attach a video file to a persisted slide whose object URL died with the
   // previous session (layers are preserved; metadata refreshed from the file)
@@ -279,12 +293,41 @@ export default function Editor({ viewSwitcher = null, active = true }) {
     OBJECT_URLS.clear();
     undoRef.current = [];
     redoRef.current = [];
-    const first = newSlide(null, [createTextLayer({ text: SEED_TEXT, yPct: 12 })]);
+    const first = newSlide(null, [createTextLayer({ text: SEED_TEXT })]);
     setSlides([first]);
     setCurrentSlideId(first.id);
     setSelectedLayerId(null);
+    setGlobalLock(false);
     setToast(null);
   }, []);
+
+  // ---- global lock: while on, Slide 1 is the template — its layers' position,
+  // size, colour, style, alignment and rotation propagate to the same layer
+  // index on every other slide. Text stays per-slide (that's the whole point).
+  const firstSlideId = slides[0]?.id;
+
+  const toggleGlobalLock = useCallback(() => {
+    setGlobalLock((prev) => {
+      const next = !prev;
+      if (next && slides.length > 1) {
+        commit();
+        setSlides((cur) => {
+          const template = cur[0].layers;
+          return cur.map((s, i) => {
+            if (i === 0) return s;
+            const layers = template.map((tl, idx) => {
+              const { text: _text, ...style } = tl;
+              const existing = s.layers[idx];
+              return existing ? { ...existing, ...style } : { ...style, id: uid('layer'), text: DEFAULT_LAYER_TEXT };
+            });
+            return { ...s, layers };
+          });
+        });
+        setToast({ kind: 'info', msg: 'Layout locked — every slide now matches Slide 1', action: { label: 'Undo', onClick: undo } });
+      }
+      return next;
+    });
+  }, [slides, commit, undo]);
 
   // ---- layer helpers (operate on current slide) ----
   const scrollInspectorCue = useCallback(() => {
@@ -293,67 +336,146 @@ export default function Editor({ viewSwitcher = null, active = true }) {
     }
   }, []);
 
+  // while locked, only Slide 1 may make structural/style changes — every other
+  // slide just mirrors it. Text edits are exempt (checked by each caller).
+  const lockBlocksHere = globalLock && currentSlideId !== firstSlideId;
+  const lockBlockedToast = useCallback((verb) => {
+    setToast({ kind: 'info', msg: `Unlock to ${verb} here — layout follows Slide 1.` });
+  }, []);
+
   const addLayer = useCallback((overrides = {}) => {
+    if (lockBlocksHere) { lockBlockedToast('add layers'); return; }
     commit();
     const layer = createTextLayer(overrides);
-    patchSlide(currentSlideId, (s) => ({ ...s, layers: [...s.layers, layer] }));
+    if (globalLock && slides.length > 1) {
+      setSlides((prev) => prev.map((s, i) => (
+        i === 0
+          ? { ...s, layers: [...s.layers, layer] }
+          : { ...s, layers: [...s.layers, { ...layer, id: uid('layer'), text: DEFAULT_LAYER_TEXT }] }
+      )));
+    } else {
+      patchSlide(currentSlideId, (s) => ({ ...s, layers: [...s.layers, layer] }));
+    }
     setSelectedLayerId(layer.id);
     scrollInspectorCue();
-  }, [currentSlideId, patchSlide, commit, scrollInspectorCue]);
+  }, [currentSlideId, patchSlide, commit, scrollInspectorCue, globalLock, slides.length, lockBlocksHere, lockBlockedToast]);
 
   const changeLayer = useCallback((layerId, patch) => {
+    const isTextOnly = Object.keys(patch).length === 1 && 'text' in patch;
+    if (lockBlocksHere && !isTextOnly) { lockBlockedToast('reposition, resize or restyle'); return; }
     // leading-edge commit: snapshot the true pre-drag/pre-burst state once,
     // then let the rest of the burst mutate freely
     const now = Date.now();
     if (now - lastChangeRef.current > 300) commit();
     lastChangeRef.current = now;
-    patchSlide(currentSlideId, (s) => ({
-      ...s,
-      layers: s.layers.map((l) => (l.id === layerId ? { ...l, ...patch } : l)),
-    }));
-  }, [currentSlideId, patchSlide, commit]);
+
+    const propagate = globalLock && currentSlideId === firstSlideId && !isTextOnly && slides.length > 1;
+    setSlides((prev) => {
+      const idx = propagate ? prev[0].layers.findIndex((l) => l.id === layerId) : -1;
+      return prev.map((s, i) => {
+        if (s.id === currentSlideId) {
+          return { ...s, layers: s.layers.map((l) => (l.id === layerId ? { ...l, ...patch } : l)) };
+        }
+        if (propagate && i !== 0 && idx !== -1 && s.layers[idx]) {
+          return { ...s, layers: s.layers.map((l, j) => (j === idx ? { ...l, ...patch } : l)) };
+        }
+        return s;
+      });
+    });
+  }, [currentSlideId, commit, globalLock, firstSlideId, slides.length, lockBlocksHere, lockBlockedToast]);
 
   const deleteLayer = useCallback((layerId) => {
+    if (lockBlocksHere) { lockBlockedToast('delete layers'); return; }
     commit();
-    patchSlide(currentSlideId, (s) => ({ ...s, layers: s.layers.filter((l) => l.id !== layerId) }));
+    if (globalLock && slides.length > 1) {
+      const idx = slides[0].layers.findIndex((l) => l.id === layerId);
+      setSlides((prev) => prev.map((s, i) => {
+        if (i === 0) return { ...s, layers: s.layers.filter((l) => l.id !== layerId) };
+        return idx === -1 ? s : { ...s, layers: s.layers.filter((_, j) => j !== idx) };
+      }));
+    } else {
+      patchSlide(currentSlideId, (s) => ({ ...s, layers: s.layers.filter((l) => l.id !== layerId) }));
+    }
     setSelectedLayerId((cur) => (cur === layerId ? null : cur));
-  }, [currentSlideId, patchSlide, commit]);
+  }, [currentSlideId, patchSlide, commit, globalLock, slides, lockBlocksHere, lockBlockedToast]);
 
   const duplicateLayer = useCallback((layerId) => {
+    if (lockBlocksHere) { lockBlockedToast('duplicate layers'); return; }
     commit();
     // uid minted in the handler (not inside the updater) so the updater stays
     // pure under StrictMode double-invocation and the selection always matches
     const newId = uid('layer');
-    patchSlide(currentSlideId, (s) => {
-      const src = s.layers.find((l) => l.id === layerId);
-      if (!src) return s;
-      return { ...s, layers: [...s.layers, { ...src, id: newId, xPct: src.xPct + 4, yPct: src.yPct + 4 }] };
-    });
+    const offsetYFor = (base) => {
+      const boxHPct = (layoutLayer(base, format).totalH / format.h) * 100;
+      return clampYToSafeZone(base.yPct + 4, boxHPct);
+    };
+    if (globalLock && slides.length > 1) {
+      const srcIdx = slides[0].layers.findIndex((l) => l.id === layerId);
+      const template = srcIdx !== -1 ? slides[0].layers[srcIdx] : null;
+      setSlides((prev) => prev.map((s, i) => {
+        if (i === 0) {
+          const src = s.layers.find((l) => l.id === layerId);
+          if (!src) return s;
+          return { ...s, layers: [...s.layers, { ...src, id: newId, xPct: src.xPct + 4, yPct: offsetYFor(src) }] };
+        }
+        if (!template) return s;
+        const { id: _id, text: _text, ...style } = template;
+        return { ...s, layers: [...s.layers, { ...style, id: uid('layer'), text: DEFAULT_LAYER_TEXT, xPct: style.xPct + 4, yPct: offsetYFor(style) }] };
+      }));
+    } else {
+      patchSlide(currentSlideId, (s) => {
+        const src = s.layers.find((l) => l.id === layerId);
+        if (!src) return s;
+        return { ...s, layers: [...s.layers, { ...src, id: newId, xPct: src.xPct + 4, yPct: offsetYFor(src) }] };
+      });
+    }
     setSelectedLayerId(newId);
-  }, [currentSlideId, patchSlide, commit]);
+  }, [currentSlideId, patchSlide, commit, globalLock, slides, format, lockBlocksHere, lockBlockedToast]);
 
   // dir: +1 forward (later in array = on top), -1 backward
   const reorderLayer = useCallback((layerId, dir) => {
+    if (lockBlocksHere) { lockBlockedToast('reorder layers'); return; }
     commit();
-    patchSlide(currentSlideId, (s) => {
-      const i = s.layers.findIndex((l) => l.id === layerId);
+    if (globalLock && slides.length > 1) {
+      const i = slides[0].layers.findIndex((l) => l.id === layerId);
       const j = i + dir;
-      if (i < 0 || j < 0 || j >= s.layers.length) return s;
-      const layers = [...s.layers];
-      [layers[i], layers[j]] = [layers[j], layers[i]];
-      return { ...s, layers };
-    });
-  }, [currentSlideId, patchSlide, commit]);
+      if (i < 0 || j < 0 || j >= slides[0].layers.length) return;
+      setSlides((prev) => prev.map((s) => {
+        if (j >= s.layers.length) return s;
+        const layers = [...s.layers];
+        [layers[i], layers[j]] = [layers[j], layers[i]];
+        return { ...s, layers };
+      }));
+    } else {
+      patchSlide(currentSlideId, (s) => {
+        const i = s.layers.findIndex((l) => l.id === layerId);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= s.layers.length) return s;
+        const layers = [...s.layers];
+        [layers[i], layers[j]] = [layers[j], layers[i]];
+        return { ...s, layers };
+      });
+    }
+  }, [currentSlideId, patchSlide, commit, globalLock, slides, lockBlocksHere, lockBlockedToast]);
 
   const applyPack = useCallback((packId) => {
     const pack = getPack(packId);
     if (!pack) return;
+    if (lockBlocksHere) { lockBlockedToast('add a pack'); return; }
     commit();
     const built = pack.build();
-    patchSlide(currentSlideId, (s) => ({ ...s, layers: [...s.layers, ...built] }));
+    if (globalLock && slides.length > 1) {
+      setSlides((prev) => prev.map((s, i) => (
+        i === 0
+          ? { ...s, layers: [...s.layers, ...built] }
+          : { ...s, layers: [...s.layers, ...built.map((l) => ({ ...l, id: uid('layer'), text: DEFAULT_LAYER_TEXT }))] }
+      )));
+    } else {
+      patchSlide(currentSlideId, (s) => ({ ...s, layers: [...s.layers, ...built] }));
+    }
     if (built.length) setSelectedLayerId(built[built.length - 1].id);
     scrollInspectorCue();
-  }, [currentSlideId, patchSlide, commit, scrollInspectorCue]);
+  }, [currentSlideId, patchSlide, commit, scrollInspectorCue, globalLock, slides.length, lockBlocksHere, lockBlockedToast]);
 
   // ---- keyboard: undo/redo, delete, deselect, arrow-nudge ----
   useEffect(() => {
@@ -381,14 +503,17 @@ export default function Editor({ viewSwitcher = null, active = true }) {
         const patch = {};
         if (e.key === 'ArrowLeft') patch.xPct = round1(cur.xPct - step);
         else if (e.key === 'ArrowRight') patch.xPct = round1(cur.xPct + step);
-        else if (e.key === 'ArrowUp') patch.yPct = round1(cur.yPct - step);
-        else if (e.key === 'ArrowDown') patch.yPct = round1(cur.yPct + step);
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          const raw = cur.yPct + (e.key === 'ArrowUp' ? -step : step);
+          const boxHPct = (layoutLayer(cur, format).totalH / format.h) * 100;
+          patch.yPct = round1(clampYToSafeZone(raw, boxHPct));
+        }
         changeLayer(selectedLayerId, patch);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, selectedLayerId, currentSlide, deleteLayer, changeLayer, undo, redo]);
+  }, [active, selectedLayerId, currentSlide, deleteLayer, changeLayer, undo, redo, format]);
 
   // ---- window-level drop/paste: never navigate away on a missed drop; paste
   // an image anywhere (unless typing in a field) to add it ----
@@ -497,8 +622,17 @@ export default function Editor({ viewSwitcher = null, active = true }) {
         {viewSwitcher}
         <div className="ed-toolbar-actions">
           {storageFull && <span className="ed-storage-chip">Autosave paused: storage full</span>}
+          {lockBlocksHere && <span className="ed-lock-chip">Layout locked to Slide 1</span>}
           <button className="ed-btn" title="Start a new project" disabled={!!busy} onClick={resetProject}>
             <FilePlus size={16} /> New
+          </button>
+          <button
+            className={`ed-btn ${globalLock ? 'ed-btn-lock-active' : ''}`}
+            title="Keep every slide's text layout identical to Slide 1"
+            disabled={slides.length < 2}
+            onClick={toggleGlobalLock}
+          >
+            {globalLock ? <Lock size={16} /> : <Unlock size={16} />} {globalLock ? 'Layout locked' : 'Lock layout'}
           </button>
           <button className="ed-btn" onClick={() => addLayer()}>
             <Type size={16} /> Text
